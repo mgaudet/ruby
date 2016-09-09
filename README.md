@@ -1,9 +1,72 @@
+This branch contains a modified version of the Ruby VM that builds the 
+[Ruby + OMR Technology Preview](https://github.com/rubyomr-preview/rubyomr-preview) ,
+*JIT component only*. 
+
 # What's Ruby
 
 Ruby is the interpreted scripting language for quick and easy object-oriented
 programming.  It has many features to process text files and to do system
 management tasks (as in Perl).  It is simple, straight-forward, and
 extensible.
+
+## Ruby + OMR Technology Preview
+
+This is an experimental version of Ruby integrated with the [Eclipse OMR
+Project](https://github.com/eclipse/omr) compiler technology.
+Eclipse OMR is an open source C/C++ collection of language runtime technologies.
+
+Visit [Ruby + OMR Technology Preview](https://github.com/rubyomr-preview/rubyomr-preview)
+to get more details about this technology preview.
+
+Our current Ruby + OMR changes are based on Ruby 2.2. We have created
+a branch named ruby_2_2_omr, the default branch in this fork, containing a single
+commit to show the changes needed to incorporate Eclipse OMR into Ruby.
+
+The branch ruby_2_2_omr_jitonly contains the changes required to activate the JIT only. 
+
+## Building Ruby + OMR
+
+Simplified steps to build Ruby + OMR.  See more detailed instructions below to
+modify the install location, etc.
+```
+$ git clone https://github.com/rubyomr-preview/ruby.git --branch ruby_2_2_omr --recursive 
+$ cd ruby
+$ autoconf
+$ ./configure SPEC=<specname> --with-omr-jit
+$ make
+$ make install
+```
+Since the Ruby + OMR code has only been tested on Linux x86-64, Linux PPC-LE-64, Linux PPC-BE-64
+and Linux 390-64 the acceptable values for `<specname>` are:
+```
+1. linux_x86-64
+2. linux_ppc-64_le_gcc
+3. linux_ppc-64
+4. linux_390-64
+```
+
+## Running with the JIT compiler
+
+Use the environment variable `OMR_JIT_OPTIONS` to pass options; Be sure to start the variable
+with `-Xjit:` to activate the JIT.  
+
+Some options of interest: 
+
+| `-Xjit:` option        | Description                                                          | 
+|------------------------|----------------------------------------------------------------------| 
+| `count=`_N_.           | How many times a method needs to be invoked before it is compiled.   | 
+| `verbose`              |  Outputs compilation decisions to `stdout`                           |
+| `vlog=`_file_          |  Redirect compilation decision output to _file_                      |
+| `tracefull,log=`_file_ | Produce a compilation log at _file_, suffixed with PID               |
+
+### Running without installing
+
+If you haven't run `make install`, the dynamic loader will complain. Tell it where to find 
+`librbjit` by pointing `LD_LIBRARY_PATH` to this directory.
+
+So, running `make test` without installing: 
+
+    LD_LIBRARY_PATH=$PWD OMR_JIT_OPTIONS=-Xjit:count=0 make test
 
 ## Features of Ruby
 

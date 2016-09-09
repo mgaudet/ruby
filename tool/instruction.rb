@@ -332,7 +332,7 @@ class RubyVM
       add_insn insn = Instruction.new(
         name, opes, orig_insn.pops, orig_insn.rets, comm,
         orig_insn.body, orig_insn.tvars, orig_insn.sp_inc,
-        orig_insn, defopes)
+        orig_insn, defopes, :optimized)
       orig_insn.add_optimized insn
     end
 
@@ -488,7 +488,7 @@ class RubyVM
       }
       add_insn insn = Instruction.new("UNIFIED_" + names.join('_'),
                                    opes, pops, rets.reverse, comm, body,
-                                   tvars_ary, sp_inc)
+                                   tvars_ary, sp_inc, :unified)
       insn.defopes.replace defopes
       insns[0].add_unif [insn, insns]
     end
@@ -661,6 +661,426 @@ class RubyVM
       fn = File.join(d, fn) if d
       fn
     end
+  end
+
+  # A helper class to make constructing callbacks easier 
+  class JitCallback
+    def initialize insn 
+       @insn          = insn
+       @defines       = [] 
+       @arguments     = []
+       @return        = 'void'
+       
+       # mostly for convenience.
+       @name          = insn.name
+       @body          = insn.body 
+
+       # puts "====> insn: #{insn.name}"
+       # Ensure we return analyzed
+       analyze 
+
+       # puts "=======#{insn.name}======"
+       # puts "opes:                 #{insn.opes}"
+       # puts "pops:                 #{insn.pops}"
+       # puts "arguments (computed): #{@arguments}"
+       # puts "====================="
+    end
+
+    def emit
+       function = ''
+       function << emit_signature 
+       function << emit_defines 
+       function << "{\n"
+       function << emit_body
+       function << "}\n\n"
+       function << emit_undefines
+       return function
+    end
+
+    # Emit the signature of this method
+    def emit_signature
+       return "#{@return}\nvm_#{@name}_jit(#{@arguments.join(", ")})\n"
+    end 
+
+    # Emit the function pointer signature 
+    def emit_function_pointer
+       return "#{@return}\t(*vm_#{@name}_f)\t\t(#{@arguments.join(", ")});"
+    end
+
+    # Initialize a particular structure's value with the function. 
+    def emit_initialization structure
+       return "#{structure}vm_#{@name}_f = \t\tvm_#{@name}_jit;"
+    end
+
+    attr_reader :insn, :name, :arguments, :body, :defines, :return
+
+    private
+
+    # Analysis
+    def analyze 
+       analyze_args
+       analyze_body
+       analyze_return
+
+       #De-dupe.
+       @arguments.uniq!
+       @defines.uniq!
+    end
+
+    # Return true if an argument would confict 
+    # with a generated return. 
+    def argument_conflict retval 
+       type,name = retval
+       #puts "Checking '#{type} #{name}' for conflict in #{@arguments}"
+       for k in @arguments
+          if "#{type} #{name}" == k
+             return true
+          end
+       end
+       return false
+    end
+
+    def analyze_return
+       if @insn.rets.length == 1
+          # Return type
+          @return = @insn.rets[0][0]
+
+          # Prepend unless conflict with an argument. 
+          @body.insert(0,"    #{@insn.rets[0][0]} #{@insn.rets[0][1]};\n") unless argument_conflict @insn.rets[0]
+          @body << "\n    return #{@insn.rets[0][1]};\n"
+       else
+          #Return type defaults to void
+          @body << "\n    return;\n"
+       end
+    end
+
+    def analyze_body 
+       analyze_body_for_required_arguments
+       analyze_body_for_required_defines 
+       analyze_body_for_non_macro_defines
+       analyze_body_for_indirect_defines_and_args
+    end
+
+    # Map defines to redefinitions.
+    def get_define_map
+       # Map must jibe with argument logic.
+       # Don't include #define, will be prepended at emit, 
+       # key doesn't include args if they exist, to simplify  
+       # undef code.
+       defines = { 
+          'RESTORE_REGS'          => "RESTORE_REGS()",
+          'GET_CFP'               => 'GET_CFP()   (th->cfp)',
+          'reg_cfp'               => 'reg_cfp     (th->cfp)',
+          'GET_SP'                => 'GET_SP()    (th->cfp->sp)',
+          'GET_PC'                => 'GET_SP()    (th->cfp->pc)',
+          'TOPN'                  => "TOPN(x)     (*(th->cfp->sp - (x) - 1 ))",
+          'NEXT_INSN'             => "NEXT_INSN() assert(0 && \"NEXT_INSN in a callback doesn't work.\")",
+          'JUMP'                  => "JUMP(dst)   assert(0 && \"JUMP      in a callback is broken at the moment\")",
+          'INSN_LABEL'            => "INSN_LABEL(lab)  LABEL_#{@name}_##lab",
+          'REG_SP'                => "REG_SP (th->cfp->sp)",
+          'reg_sp'                => "reg_sp (th->cfp->sp)",
+          'SET_SP'                => "SET_SP(x) (reg_cfp->sp  = (x)))",
+          'INC_SP'                => "INC_SP(x) (reg_cfp->sp += (x)))",
+          'DEC_SP'                => "DEC_SP(x) (reg_cfp->sp -= (x)))",
+
+       }
+    end
+
+    # Return a map of macro -> argument
+    def get_argument_map
+       # Map must jibe with defines. 
+       macros = { 
+          'CALL_SIMPLE_METHOD' => ['rb_thread_t* th',
+                                   'CALL_INFO ci'],
+          'GET_CFP'            => ['rb_thread_t* th'],
+          'GET_SP'             => ['rb_thread_t* th'],
+       }
+    end
+
+
+
+    def analyze_body_for_required_defines 
+       # Direct reference in body. 
+       defines = get_define_map
+       for i in defines.keys
+          if /#{i}/.match(@body)
+             @defines << [i, defines[i]]
+          end
+       end
+    end
+
+
+    def analyze_body_for_non_macro_defines
+       # Unfortunately, not all the defines we care about are nicely wrapped
+       # up in macros. These are going to need special handling. We capture
+       # these in the below hash and processing. 
+       regex_define = { 
+          #"reg_cfp"     => "reg_cfp (th->cfp)",  
+       }
+
+       for k,v in regex_define
+          if /#{k}/.match(@body)
+             @defines << [k, v]
+          end
+       end
+    end
+
+    def analyze_body_for_indirect_defines_and_args 
+       defines   = get_define_map
+       arguments = get_argument_map
+
+       # Some macros have perfectly valid definitons, 
+       # but reference other macros or arguments.
+       #
+       # We map those out here. 
+       patterns = { 
+          'GET_BLOCK_PTR'      => ['GET_CFP','reg_cfp'],
+          'GET_EP'             => ['GET_CFP','reg_cfp'],
+          'GET_LEP'            => ['GET_CFP','reg_cfp'],
+          'GET_ISEQ'           => ['GET_CFP','reg_cfp'],
+          'GET_SELF'           => ['GET_CFP','reg_cfp'],
+          'reg_cfp'            => ['GET_CFP','reg_cfp'],
+          'PUSH'               => ['GET_CFP','reg_cfp', 'GET_SP', 'reg_sp'],
+          'CALL_SIMPLE_METHOD' => ['GET_CFP','reg_cfp', 'RESTORE_REGS', 'NEXT_INSN'],
+          'SET_SV'             => ["reg_sp"],
+          'TOPN'               => ["reg_sp"],
+          'STACK_ADDR_FROM_TOP'=> ["reg_sp"], 
+       }
+
+       for direct_macro,macros in patterns
+          if /#{direct_macro}/.match(@body)
+	     # puts "#{@insn} body matched /#{direct_macro}/..."
+             # This can be a list
+             for indirect_macro in macros 
+                # Check if we need a macro definition.... 
+                if defines.key? indirect_macro
+                   @defines << [indirect_macro, defines[indirect_macro]]     
+                end
+                # or a new argument.
+                if arguments.key? indirect_macro
+	           #puts "#{indirect_macro} body matched arguments -- injecting #{arguments[indirect_macro]} " 
+                   @arguments.unshift *(arguments[indirect_macro])
+                end
+             end
+          end
+       end
+    end
+
+    
+
+    # Updates the list of arguments for this JitCallback 
+    def analyze_body_for_required_arguments
+       macros = get_argument_map
+
+       for i in macros.keys
+          if /#{i}/.match(@body)
+	     # puts "direct match on #{i} in body -- injecting #{macros[i]} " 
+             @arguments.unshift *(macros[i])
+          end
+       end
+
+       # Unfortunately, not all the params we care about are nicely wrapped
+       # up in macros. These are going to need special handling. We capture
+       # these in the below hash and processing. 
+    
+       regex_args = { 
+          "th,"     => ['rb_thread_t* th'],
+          "th;"     => ['rb_thread_t* th'],
+          "\\(th"     => ['rb_thread_t* th'],
+          "th\\)"     => ['rb_thread_t* th'],
+       }
+
+       for k,v in regex_args
+          if /#{k}/.match(@body)
+	     # puts "#{k} body matched arguments -- injecting #{regex_args[k]} " 
+             @arguments.unshift *(regex_args[k])  
+          end
+       end
+    end
+
+    # instruction demanded arguments like the operands and 
+    # pops. 
+    def analyze_args
+       sum_args = @insn.opes + @insn.pops.reverse
+       sum_args.map! { |type,name| "#{type} #{name}" } 
+       # puts "appending #{sum_args} " 
+       @arguments.concat(sum_args)
+    end
+
+    # Emission
+
+    def emit_undefines
+       undefines = ''
+       for k,v in @defines 
+          undefines << "#undef #{k}\n"
+       end
+       return undefines
+    end 
+
+    def emit_defines
+       defines = ''
+       defines << emit_undefines
+
+       for k,v in @defines
+          defines << "#define #{v}\n"
+       end
+       return defines
+    end
+
+    def emit_body
+       return @body 
+    end
+  
+  end 
+
+
+  ###################################################################
+  # Support class for filtering out callbacks we don't quite understand
+  # yet. 
+
+  class JitGenerator < SourceCodeGenerator
+
+    # Return a container filled with extracts 
+    # from instructions that pass our tests. 
+    def generate_strings(container, extract)
+      @insns.each { |insn|
+        # If instructions with multiple stack returns are desired, special handling 
+        # will be required. For now, emmit a comment that says we haven't handled this. 
+        if insn.rets.length  > 1
+           container << "/* Skipping instruction `#{insn.name}` due to muliple stack returns */\n" 
+        elsif insn.type == :optimized || insn.type == :unified
+           container << "/* Skipping instruction `#{insn.name}` as it's optimized, and will require special handling of opt/unified operands.  */\n" 
+        elsif has_elipsis insn
+           container << "/* Skipping instruction `#{insn.name}` has elipsis */\n" 
+        else  
+           jc = JitCallback.new(insn) 
+           container << extract.call(jc) 
+        end 
+      }
+
+      return container
+    end
+
+
+    #######
+    private
+
+    def has_elipsis insn
+      # puts "insn: #{insn.rets} "
+      candidates = insn.rets + insn.opes + insn.pops
+      flat = candidates.select { |type, name| type == "..." || name == "..." }
+      return flat.empty? == false
+    end
+
+    def flatten_arguments args 
+      flat = args.map { |type,name| "#{type} #{name}" }
+      return flat.join(", ")
+    end
+ 
+  end
+
+  
+  ###################################################################
+  # vm_jit.inc
+  #
+  # Emits a file suitable for including into one of the vm files, 
+  # producing a series of callback functions which can be consumed 
+  # by a JIT compiler. 
+  #
+  # This process is reasonably complicated because instruction bodies 
+  # have a relatively large amount of VM state accssible. JIT functions will
+  # either have to provide that kind of state in a manipulable form, or, we
+  # will have to hide that state. 
+  # 
+  # General Overview: 
+  # ================ 
+  #
+  # Given an instruction foo
+  #
+  # DEFINE_INSN
+  # foo 
+  # (VALUE flag)
+  # (VALUE ary)
+  # (VALUE obj)
+  # {
+  #     obj = do_foo(ary, flag) 
+  #     MACRO_MAGIC(obj);
+  # }
+  # 
+  # This needs to parse the instruction, generating the correct return value,
+  # as well as setting up the enviornment for non-interpreter loop invocation. 
+  #
+  # This relies heavily on the class JitCallback
+  class VmJitBodyGenerator < JitGenerator
+    def generate
+      vm_body = ''
+      vm_body = generate_strings(vm_body, lambda { |jc| jc.emit } )  
+      vm_body << "\n"
+      src = vpath.read('template/vm_jit.inc.tmpl')
+      ERB.new(src).result(binding)
+    end
+
+    def generate_from_insnname insnname
+      make_insn_def @insns[insnname.to_s]
+    end
+
+  end
+
+  ###################################################################
+  # vm_jit_callbacks.inc
+  #
+  # Forward declarations of jit callback struct
+  class VmJitHeaderGenerator < JitGenerator
+    def generate
+      callback_list = []
+      callback_list = generate_strings([], lambda { |jc| jc.emit_function_pointer } )  
+      src = vpath.read('template/vm_jit_callbacks.inc.tmpl')
+      ERB.new(src).result(binding)
+    end
+
+    def generate_from_insnname insnname
+      make_insn_def @insns[insnname.to_s]
+    end
+
+  end
+
+  ###################################################################
+  # vm_jit_callbacks.inc
+  #
+  # Forward declarations of jit callback struct
+  class VmJitForwardDeclareGenerator < JitGenerator
+    def generate
+      callback_list = []
+      callback_list = generate_strings([], lambda { |jc| jc.emit_signature + ";" })
+      src = vpath.read('template/vm_jit_forward.inc.tmpl')
+      ERB.new(src).result(binding)
+    end
+
+    def generate_from_insnname insnname
+      make_insn_def @insns[insnname.to_s]
+    end
+
+  end
+
+
+
+
+  ###################################################################
+  # vm_jit_initialize.inc
+  # 
+  # Initialize jit structure with generated function addresses.
+  class VmJitInitializationGenerator < JitGenerator
+    def generate
+      callback_list = []
+      callback_list = generate_strings([], lambda { |jc| jc.emit_initialization "jit->callbacks."} )  
+      src = vpath.read('template/vm_jit_initializations.inc.tmpl')
+      ERB.new(src).result(binding)
+    end
+
+    def generate_from_insnname insnname
+      make_insn_def @insns[insnname.to_s]
+    end
+
   end
 
   ###################################################################
@@ -1262,6 +1682,10 @@ class RubyVM
   class SourceCodeGenerator
     Files = { # codes
       'vm.inc'         => VmBodyGenerator,
+      'vm_jit.inc'                      => VmJitBodyGenerator,
+      'vm_jit_callbacks.inc'            => VmJitHeaderGenerator,
+      'vm_jit_initializations.inc'      => VmJitInitializationGenerator,
+      'vm_jit_forward.inc'              => VmJitForwardDeclareGenerator,
       'vmtc.inc'       => VmTCIncGenerator,
       'insns.inc'      => InsnsIncGenerator,
       'insns_info.inc' => InsnsInfoIncGenerator,

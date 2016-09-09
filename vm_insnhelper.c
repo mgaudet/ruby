@@ -2149,3 +2149,309 @@ FUNC_FASTCALL(rb_vm_opt_struct_aset)(rb_thread_t *th, rb_control_frame_t *reg_cf
     rb_struct_aset(GET_SELF(), TOPN(0), TOPN(1));
     return reg_cfp;
 }
+
+#ifdef JIT_INTERFACE 
+/**
+ * Compile an iseq. 
+ */
+void *
+vm_jit_compile(rb_vm_t *vm, rb_iseq_t *iseq)
+{
+    assert(   vm->jit
+           && vm->jit->compile_f
+           && "vm_jit_compile should only be called when we have JIT enabled");
+
+    return (vm->jit->compile_f)(iseq);
+}
+
+/*
+ * JIT the given iseq. 
+ *
+ * Return true if successful, and false if not. 
+ */
+static VALUE
+vm_jit(rb_thread_t *th, rb_iseq_t * iseq)
+{
+    if (!th->vm->jit) return Qfalse; /* Don't compile if we have no jit.  */
+    
+    iseq_jit_body_info *body_info = (iseq_jit_body_info *)vm_jit_compile(th->vm, iseq);
+    if (body_info) {
+        /* OMR:TODO:GVL: we may need to do the following atomically */
+        
+        body_info->recomp_count = th->vm->jit->default_count;
+        body_info->invoke_count = 0;
+        body_info->prev = NULL;
+        body_info->next = iseq->jit.body_info;
+        if (iseq->jit.body_info) {
+            iseq->jit.body_info->prev = body_info;
+        }
+        iseq->jit.body_info = body_info;
+        iseq->jit.u.code  = body_info->startPC;
+        iseq->jit.state = ISEQ_JIT_STATE_JITTED;
+        return Qtrue; /* jitted now */
+    } else {
+        if (iseq->jit.state == ISEQ_JIT_STATE_JITTED) {
+            /* unable to recompile - never attempt again */
+            iseq->jit.state = ISEQ_JIT_STATE_RECOMP_BLACKLISTED;
+            return Qtrue;
+        }
+        else {
+            /* unable to compile - never attempt again */
+            iseq->jit.state = ISEQ_JIT_STATE_BLACKLISTED;
+            return Qfalse;
+        }
+    }
+}
+
+static VALUE
+vm_jitted_p(rb_thread_t *th, rb_iseq_t *iseq)
+{
+    if (!th->vm->jit) return Qfalse;
+ 
+    if (iseq->jit.state == ISEQ_JIT_STATE_BLACKLISTED)
+        return Qfalse;
+    
+    if (iseq->jit.state == ISEQ_JIT_STATE_RECOMP_BLACKLISTED)
+        return Qtrue;
+
+    if (iseq->jit.state == ISEQ_JIT_STATE_JITTED) {
+        if (th->vm->jit->options & TIERED_COMPILATION) {
+            --iseq->jit.body_info->recomp_count;
+            
+            if (iseq->jit.body_info->recomp_count < 0) {
+                return vm_jit(th,iseq); 
+            }
+        }
+        return Qtrue;
+    }
+    
+    if (iseq->jit.state == ISEQ_JIT_STATE_ZERO) {
+        /* uninitialized */
+        /* OMR:TODO:GVL: we may need to do the following atomically */
+        iseq->jit.u.count = th->vm->jit->default_count;
+        iseq->jit.state = ISEQ_JIT_STATE_INTERPRETED;
+        iseq->jit.body_info = NULL;
+    }
+
+    --iseq->jit.u.count;
+
+    if (iseq->jit.u.count < 0) {
+       return vm_jit(th,iseq); 
+    }
+    
+    return Qfalse; /* not jitted yet */
+}
+
+static VALUE
+vm_exec_jitted(rb_thread_t *th)
+{
+    VALUE val;
+    rb_control_frame_t *cfp = th->cfp;
+    jit_method_t code = (jit_method_t)(cfp->iseq->jit.u.code);
+
+    cfp->flag |= VM_FRAME_FLAG_JITTED;
+
+    val = (th->vm->jit->dispatch_f)(th, code);
+
+    return val;
+}
+
+/*
+ * Special calls
+ */
+
+static VALUE vm_exec(rb_thread_t *th);
+
+static inline VALUE
+vm_send_without_block(rb_thread_t *th, rb_call_info_t *ci, VALUE recv)
+{
+    VALUE val;
+    int from_jit = VM_FRAME_TYPE_JITTED_P(th->cfp);
+
+#if defined(OMR_JIT_PROFILING)
+    /*Profile for the klass here.*/
+    if(ci->profiled_klass != Qnil)
+       {
+       VALUE klass = CLASS_OF(recv);
+       if(ci->profiled_klass == Qundef)
+          ci->profiled_klass = klass;
+       else if (ci->profiled_klass != klass)
+          ci->profiled_klass = Qnil;
+       }
+#endif
+
+    ci->argc = ci->orig_argc;
+    vm_search_method(ci, ci->recv = recv);
+    val = (*ci->call)(th, th->cfp, ci);
+
+    if (val == Qundef) {
+	/* undef implies that send only did a frame setup.
+	   we need invovke vm_exec */
+
+        if (from_jit ||
+            vm_jitted_p(th, th->cfp->iseq) == Qtrue) {
+
+            th->cfp->flag |= VM_FRAME_FLAG_FINISH;
+            val = vm_exec(th);
+        }
+        
+    }
+    return val;
+}
+
+static inline VALUE
+vm_send(rb_thread_t *th, rb_call_info_t *ci, rb_control_frame_t *reg_cfp)
+{
+    VALUE val;
+    int from_jit = VM_FRAME_TYPE_JITTED_P(reg_cfp);
+
+    ci->argc = ci->orig_argc;
+    vm_caller_setup_arg_block(th, reg_cfp, ci, FALSE);
+    vm_search_method(ci, ci->recv = TOPN(ci->argc));
+    val = (*ci->call)(th, reg_cfp, ci);
+
+    if (val == Qundef) {
+	/* undef implies that send only did a frame setup.
+	   we need invovke vm_exec */
+
+        if (from_jit ||
+            vm_jitted_p(th, th->cfp->iseq) == Qtrue) {
+
+            th->cfp->flag |= VM_FRAME_FLAG_FINISH;
+            val = vm_exec(th);
+        }
+    }
+
+    return val;
+}
+
+
+static inline VALUE
+vm_invokesuper(rb_thread_t *th, rb_call_info_t *ci, rb_control_frame_t *reg_cfp)
+{
+    VALUE val;
+    int from_jit = VM_FRAME_TYPE_JITTED_P(reg_cfp);
+
+    ci->argc = ci->orig_argc;
+    vm_caller_setup_arg_block(th, reg_cfp, ci, TRUE);
+    ci->recv = GET_SELF();
+    vm_search_super_method(th, reg_cfp, ci);
+    val = (*ci->call)(th, reg_cfp, ci);
+
+    if (val == Qundef) {
+	/* undef implies that send only did a frame setup.
+	   we need invovke vm_exec */
+
+        if (from_jit ||
+            vm_jitted_p(th, th->cfp->iseq) == Qtrue) {
+            
+            th->cfp->flag |= VM_FRAME_FLAG_FINISH;
+            val = vm_exec(th);
+        }
+    }
+    
+    return val;
+}
+
+static inline VALUE
+vm_invoke_block_wrapper(rb_thread_t *th, rb_call_info_t *ci)
+{
+    VALUE val;
+    rb_control_frame_t *cfp = th->cfp;
+    int from_jit = VM_FRAME_TYPE_JITTED_P(cfp);
+
+    ci->argc = ci->orig_argc;
+    ci->blockptr = 0;
+    ci->recv = cfp->self;
+    val = vm_invoke_block(th, cfp, ci);
+
+    if (val == Qundef) {
+	/* undef implies that send only did a frame setup.
+	   we need invovke vm_exec */
+
+        if (from_jit ||
+            vm_jitted_p(th, th->cfp->iseq) == Qtrue) {
+            
+            th->cfp->flag |= VM_FRAME_FLAG_FINISH;
+            val = vm_exec(th);
+        }
+    }
+
+    return val;    
+}
+
+static rb_block_t *
+vm_get_block_ptr(VALUE *ep)
+{
+    return (rb_block_t*) (GC_GUARDED_PTR_REF(VM_EP_LEP(ep)[0]));
+}
+
+static void
+vm_send_woblock_jit_inline_frame(rb_thread_t *th, rb_call_info_t *ci, VALUE recv)
+{                                                                                     
+   VALUE klass,*argv,*sp = NULL;
+   rb_iseq_t *iseq = NULL;
+   rb_control_frame_t *cfp = th->cfp;
+   rb_control_frame_t *next_cfp = NULL;
+   int i, local_size;                                 
+
+   ci->argc = ci->orig_argc;
+   ci->blockptr = 0;        
+   ci->recv = recv;         
+
+   /*vm_search_method*/
+
+    klass = CLASS_OF(recv);
+    ci->me = rb_method_entry(klass, ci->mid, &ci->defined_class);
+
+
+    ci->klass = klass;
+    ci->call = vm_call_general;
+#if OPT_INLINE_METHOD_CACHE    
+    ci->method_state = GET_GLOBAL_METHOD_STATE();
+    ci->class_serial = RCLASS_SERIAL(klass);     
+#endif                                           
+
+    /*vm_callee_setup_arg*/
+    ci->aux.opt_pc = 0;        
+
+    /* vm_call_iseq_setup_normal(rb_thread_t *th, rb_control_frame_t *cfp, rb_call_info_t *ci) */
+    argv = cfp->sp - ci->argc;                                                        
+    iseq = ci->me->def->body.iseq;                                                
+    sp = argv + iseq->param.size;                                                       
+
+    /* clear local variables (arg_size...local_size) */
+    for (i = iseq->param.size, local_size = iseq->local_size; i < local_size; i++) {
+        *sp++ = Qnil;                                                             
+    }                                                                             
+
+    next_cfp = vm_push_frame(th,
+                  iseq,         
+                  VM_FRAME_MAGIC_METHOD | VM_FRAME_FLAG_JITTED,
+                  ci->recv,                                    
+                  ci->defined_class,                           
+                  VM_ENVVAL_BLOCK_PTR(ci->blockptr),           
+                  iseq->iseq_encoded + ci->aux.opt_pc,         
+                  sp,                                          
+                  0,                                           
+                  ci->me,                                      
+                  iseq->stack_max);                            
+
+    cfp->sp = argv - 1 /* recv */;
+
+   /* Latch the currently created frame. */
+   th->cfp = next_cfp;                     
+}
+
+static
+VALUE vm_send_woblock_inlineable_guard(rb_call_info_t *ci, VALUE recv)
+{
+#if defined(OMR_JIT_PROFILING)
+    VALUE klass = CLASS_OF(recv);
+    return (GET_GLOBAL_METHOD_STATE() == ci->method_state && RCLASS_SERIAL(klass) == ci->class_serial) && (klass == ci->profiled_klass);
+#else
+    return 0; 
+#endif
+}
+
+#endif
