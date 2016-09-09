@@ -32,6 +32,7 @@
 #include "thread_pthread.h"
 #endif
 
+
 #ifndef ENABLE_VM_OBJSPACE
 #ifdef _WIN32
 /*
@@ -193,23 +194,47 @@ typedef struct rb_iseq_location_struct {
 } rb_iseq_location_t;
 
 struct rb_iseq_struct;
+typedef enum iseq_type {
+ISEQ_TYPE_TOP,
+ISEQ_TYPE_METHOD,
+ISEQ_TYPE_BLOCK,
+ISEQ_TYPE_CLASS,
+ISEQ_TYPE_RESCUE,
+ISEQ_TYPE_ENSURE,
+ISEQ_TYPE_EVAL,
+ISEQ_TYPE_MAIN,
+ISEQ_TYPE_DEFINED_GUARD
+} iseq_type;
+
+
+#if defined(JIT_OMR)
+struct rb_jit_struct;
+
+typedef enum iseq_jit_state {
+    ISEQ_JIT_STATE_ZERO = 0, /* un-initialized */
+    ISEQ_JIT_STATE_INTERPRETED,
+    ISEQ_JIT_STATE_BLACKLISTED, /* don't try to jit */
+    ISEQ_JIT_STATE_RECOMP_BLACKLISTED, /* don't try to recompile */
+    ISEQ_JIT_STATE_JITTED
+} iseq_jit_state;
+
+typedef struct iseq_jit_body_info {
+    int opt_level;
+    long recomp_count;
+    unsigned long invoke_count;
+    void *startPC;
+    struct iseq_jit_body_info *prev;
+    struct iseq_jit_body_info *next;
+} iseq_jit_body_info;
+#endif
+
 
 struct rb_iseq_struct {
     /***************/
     /* static data */
     /***************/
 
-    enum iseq_type {
-	ISEQ_TYPE_TOP,
-	ISEQ_TYPE_METHOD,
-	ISEQ_TYPE_BLOCK,
-	ISEQ_TYPE_CLASS,
-	ISEQ_TYPE_RESCUE,
-	ISEQ_TYPE_ENSURE,
-	ISEQ_TYPE_EVAL,
-	ISEQ_TYPE_MAIN,
-	ISEQ_TYPE_DEFINED_GUARD
-    } type;              /* instruction sequence type */
+    iseq_type type;              /* instruction sequence type */
 #if defined(WORDS_BIGENDIAN) && (SIZEOF_VALUE > SIZEOF_INT)
     char dummy[SIZEOF_VALUE - SIZEOF_INT]; /* [Bug #10037][ruby-core:63721] */
 #endif
@@ -345,6 +370,18 @@ struct rb_iseq_struct {
     /* original iseq, before encoding
      * used for debug/dump (TODO: union with compile_data) */
     VALUE *iseq;
+
+#if defined(JIT_OMR)
+    struct {
+        iseq_jit_state state;
+        union {
+            long     count; /* number of interpretations (state == ISEQ_JIT_STATE_INT) */
+            void    *code;  /* address of jitted code (state == ISEQ_JIT_STATE_JITTED) */
+            /* OMR:TODO: we need multiple entry points to deal with complex args */
+        } u;
+        iseq_jit_body_info *body_info;
+    } jit;
+#endif
 };
 
 enum ruby_special_exceptions {
@@ -480,6 +517,9 @@ typedef struct rb_vm_struct {
     } default_params;
 
     short redefined_flag[BOP_LAST_];
+#if defined(JIT_OMR)
+    struct rb_jit_struct *jit;
+#endif
 } rb_vm_t;
 
 /* default values */
@@ -861,6 +901,13 @@ enum vm_special_object_type {
 #define VM_FRAME_FLAG_BMETHOD 0x0400
 #define VM_FRAME_TYPE_FINISH_P(cfp)  (((cfp)->flag & VM_FRAME_FLAG_FINISH) != 0)
 #define VM_FRAME_TYPE_BMETHOD_P(cfp) (((cfp)->flag & VM_FRAME_FLAG_BMETHOD) != 0)
+#ifdef JIT_OMR
+#define VM_FRAME_FLAG_JITTED 0x0800
+#define VM_FRAME_TYPE_JITTED_P(cfp) (((cfp)->flag & VM_FRAME_FLAG_JITTED) != 0)
+#else
+#define VM_FRAME_TYPE_JITTED_P(cfp) (0)
+#endif
+
 
 #define RUBYVM_CFUNC_FRAME_P(cfp) \
   (VM_FRAME_TYPE(cfp) == VM_FRAME_MAGIC_CFUNC)

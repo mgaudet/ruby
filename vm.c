@@ -18,6 +18,7 @@
 #include "eval_intern.h"
 #include "probes.h"
 #include "probes_helper.h"
+#include "jit.h"
 
 static inline VALUE *
 VM_EP_LEP(VALUE *ep)
@@ -1426,6 +1427,40 @@ hook_before_rewind(rb_thread_t *th, rb_control_frame_t *cfp, int will_finish_vm_
   };
  */
 
+static inline VALUE
+vm_exec2(rb_thread_t *th, VALUE initial)
+{
+    VALUE result;
+#if defined(JIT_OMR)
+    /* The OMR JIT is currently not able to support invocations of methods with a
+     * frame type of RESCUE.
+     *
+     * We check the frame type before checking if a method is has been jitted
+     * in order to avoid decrementing the compilation count and compiling a
+     * method if we're never going to be able to run it.
+     *
+     * Todo: 
+     *
+     *    The FINISH_P check below should be improved. Without the check, a
+     *    return from vm_exec_2 looks like an early exit from vm_exec_core,
+     *    causing a fallthrough to the `finish_vme` point.  
+     *
+     *    One option would be to reinvoke the interpreter loop, however,
+     *    early experimentation with this was unsuccessful. 
+     *
+     */
+    if (VM_FRAME_TYPE(th->cfp) != VM_FRAME_MAGIC_RESCUE && 
+        VM_FRAME_TYPE_FINISH_P(th->cfp) && 
+        vm_jitted_p(th, th->cfp->iseq) == Qtrue) { 
+	result = vm_exec_jitted(th);
+    }
+    else
+#endif
+	/* warning: dangling else above */
+	result = vm_exec_core(th, initial);
+    return result;
+}
+
 static VALUE
 vm_exec(rb_thread_t *th)
 {
@@ -1437,7 +1472,7 @@ vm_exec(rb_thread_t *th)
     _tag.retval = Qnil;
     if ((state = EXEC_TAG()) == 0) {
       vm_loop_start:
-	result = vm_exec_core(th, initial);
+	result = vm_exec2(th, initial);
 	if ((state = th->state) != 0) {
 	    err = result;
 	    th->state = 0;
@@ -1856,6 +1891,9 @@ ruby_vm_destruct(rb_vm_t *vm)
 	if (objspace) {
 	    rb_objspace_free(objspace);
 	}
+#endif
+#if defined(JIT_INTERFACE)
+	vm_jit_destroy(vm);
 #endif
 	/* after freeing objspace, you *can't* use ruby_xfree() */
 	ruby_mimfree(vm);
@@ -2790,6 +2828,7 @@ void
 Init_BareVM(void)
 {
     /* VM bootstrap: phase 1 */
+    jit_globals_t globals; 
     rb_vm_t * vm = ruby_mimmalloc(sizeof(*vm));
     rb_thread_t * th = ruby_mimmalloc(sizeof(*th));
     if (!vm || !th) {
@@ -2800,6 +2839,15 @@ Init_BareVM(void)
     rb_thread_set_current_raw(th);
 
     vm_init2(vm);
+
+#if defined(JIT_OMR)
+    globals.ruby_vm_global_constant_state_ptr = &ruby_vm_global_constant_state;
+    globals.ruby_rb_mRubyVMFrozenCore_ptr     = &rb_mRubyVMFrozenCore;
+    globals.ruby_vm_event_flags_ptr           = &ruby_vm_event_flags;
+    globals.redefined_flag_ptr                = &(vm->redefined_flag);
+    vm_jit_init(vm, globals);
+#endif
+
 #if defined(ENABLE_VM_OBJSPACE) && ENABLE_VM_OBJSPACE
     vm->objspace = rb_objspace_alloc();
 #endif
@@ -3085,4 +3133,107 @@ vm_collect_usage_register(int reg, int isset)
     if (ruby_vm_collect_usage_func_register)
 	(*ruby_vm_collect_usage_func_register)(reg, isset);
 }
+#endif
+
+extern VALUE rb_cMethod; 
+
+/* Mimics some logic in iseq.c:iseq_s_of(). That function could be refactored to
+ * support this...
+ */
+rb_iseq_t *
+get_iseq_from_value(VALUE klass, VALUE v) 
+{
+   rb_iseq_t * iseq;
+   rb_secure(1); 
+
+   if (rb_obj_is_proc(v)) { 
+      rb_proc_t *proc;
+      GetProcPtr(v, proc);
+      iseq = proc->block.iseq;
+      if (RUBY_VM_NORMAL_ISEQ_P(iseq)) {
+         return iseq;
+      }
+   }
+   else if ((iseq = rb_method_get_iseq(v)) != 0) {
+      return iseq;
+   }
+   return NULL;
+
+}
+/*
+ * call-seq:
+ *      RubyVM::JIT::exists? -> boolean
+ *
+ * Returns true if a JIT is loaded and actitve
+ */
+VALUE
+vm_jit_exists_p()
+{
+#if defined(JIT_INTERFACE)
+   rb_thread_t  *th;
+   th   = GET_THREAD();
+
+   if (th->vm->jit) return Qtrue;
+#endif
+   return Qfalse;
+}
+
+/*
+ * call-seq:
+ *    RubyVM::JIT::compiled?(method)   -> boolean 
+ *
+ * Returns true if the code associated with this method has been jitted. 
+ */
+VALUE
+vm_jit_compiled_p(VALUE klass, VALUE method)
+{
+#if defined(JIT_INTERFACE)
+   rb_iseq_t * iseq; 
+
+   iseq = get_iseq_from_value(klass,method);  
+   if (iseq && iseq->jit.state == ISEQ_JIT_STATE_JITTED)
+      return Qtrue; 
+#endif
+
+   return Qfalse; 
+
+
+}
+
+/*
+ * call-seq:
+ *    RubyVM::JIT::compile   -> boolean 
+ *
+ * Attempts to compile the method, and returns true if successful. 
+ *
+ */
+VALUE
+vm_jit_compile_method(VALUE klass, VALUE method)
+{
+#if defined(JIT_INTERFACE)
+   rb_iseq_t    *iseq; 
+   rb_thread_t  *th;
+
+   iseq = get_iseq_from_value(klass,method);
+   if (iseq) {
+      th   = GET_THREAD();
+      return vm_jit(th, iseq);   
+   }
+#endif
+   return Qfalse; 
+}
+
+VALUE rb_cJIT; 
+
+void Init_JIT(void)
+{ 
+   rb_cJIT = rb_define_class_under(rb_cRubyVM, "JIT", rb_cObject);    
+   rb_define_singleton_method(rb_cJIT, "exists?",   vm_jit_exists_p, 0); 
+   rb_define_singleton_method(rb_cJIT, "compiled?", vm_jit_compiled_p, 1); 
+   rb_define_singleton_method(rb_cJIT, "compile",   vm_jit_compile_method, 1); 
+}
+
+#ifdef JIT_INTERFACE 
+#include "vm_jit.inc"
+#include "vm_jit.c"
 #endif

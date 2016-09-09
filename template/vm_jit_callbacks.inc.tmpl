@@ -1,0 +1,14 @@
+/**
+  This file declares the callback struct.
+
+  If you want to fix something, you must edit 'insns.def', or 
+  tool/instruction.rb, or the template in vm_jit_callbacks.inc.tmpl
+ */
+#ifndef VM_JIT_CALLBACKS_H
+#define VM_JIT_CALLBACKS_H
+
+<%=
+callback_list.join("\n") 
+%>
+
+#endif /* VM_JIT_CALLBACKS_H */
