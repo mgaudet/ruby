@@ -73,13 +73,7 @@ before_script:
   - "autoconf"
   - "mkdir config_1st config_2nd"
   - "SPEC=linux_x86-64 ./configure -C --disable-install-doc --disable-install-rdoc --with-omr-jit --with-gcc=$CC $OPENSSL_FLAG"
-# - "cp -pr config.status .ext/include config_1st"  # Disabling reconfigure checking for now. 
-# - "make reconfig"
-# - "cp -pr config.status .ext/include config_2nd"
-# - "diff -ru config_1st config_2nd || true"
-  - "make -s $JOBS encs"
-  - "make -s $JOBS exts"
-  - "make update-rubyspec"
+  - "make "
 script:
   - "OMR_JIT_OPTIONS=-Xjit:count=0 LD_LIBRARY_PATH=$PWD make test"     # JIT test. LD_LIBRARY_PATH is required because we're not installing  
   - "OMR_JIT_OPTIONS=-Xjit:count=0 LD_LIBRARY_PATH=$PWD make test-all" # JIT test-all.
