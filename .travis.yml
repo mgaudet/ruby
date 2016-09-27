@@ -23,11 +23,28 @@ language: c
 # The value set here is visible via $CC environment variable.
 compiler:
   - gcc
-  - clang
+  - clang 
 
 os:
   - linux
-  - osx
+# - osx  # OMR Ruby is not running on OS X yet. 
+
+# https://docs.travis-ci.com/user/caching/
+cache: ccache
+
+
+# These are the same addons as the OMR project itself.
+addons:
+  apt:
+    sources:
+       - ubuntu-toolchain-r-test
+    packages:
+       - libnuma-dev
+       - bison
+       - gcc-multilib
+       - g++-multilib
+
+
 
 # Dependencies.  Some  header files are missing  in a Travis' worker  VM, so we
 # have  to install  them.  The  "1.9.1" here  is OK.   It is  the  most adopted
@@ -55,7 +72,7 @@ before_script:
   - "make -f common.mk BASERUBY=ruby srcdir=. update-config_files"
   - "autoconf"
   - "mkdir config_1st config_2nd"
-  - "./configure -C --disable-install-doc --disable-install-rdoc --with-gcc=$CC $OPENSSL_FLAG"
+  - "SPEC=linux_x86-64 ./configure -C --disable-install-doc --disable-install-rdoc --with-omr-jit --with-gcc=$CC $OPENSSL_FLAG"
   - "cp -pr config.status .ext/include config_1st"
   - "make reconfig"
   - "cp -pr config.status .ext/include config_2nd"
@@ -64,38 +81,13 @@ before_script:
   - "make -s $JOBS exts"
   - "make update-rubyspec"
 script:
+  - "OMR_JIT_OPTIONS=-Xjit:count=0 LD_LIBRARY_PATH=$PWD make test"     # JIT test. LD_LIBRARY_PATH is required because we're not installing  
+  - "OMR_JIT_OPTIONS=-Xjit:count=0 LD_LIBRARY_PATH=$PWD make test-all" # JIT test-all.
   - "make test"
-  - "make test-all TESTS='-q -j2'"
+  - "make test-all"
   - "make test-rubyspec"
 after_failure:
   - "if [[ $TRAVIS_OS_NAME = 'osx' ]]; then find ~/Library/Logs/DiagnosticReports -type f -name ruby_\\*.crash -ls -execdir cat {} \\; -delete; fi"
-
-# Branch matrix.  Not all branches are Travis-ready so we limit branches here.
-branches:
-  only:
-    - trunk
-    - ruby_1_9_3
-    - ruby_2_0_0
-    - ruby_2_1
-    - ruby_2_2
-
-# We want to be notified when something happens.
-notifications:
-  irc:
-    channels:
-      - "irc.freenode.org#ruby-core"
-      - "irc.freenode.org#ruby-ja"
-    on_success: change # [always|never|change] # default: always
-    on_failure: change # [always|never|change] # default: always
-    template:
-      - "%{message} by @%{author}: See %{build_url}"
-
-  # Update ruby-head installed on Travis CI so other projects can test against it.
-  webhooks:
-    urls:
-      - "https://rubies.travis-ci.org/rebuild/ruby-head"
-    on_success: always
-    on_failure: never
 
 # Local Variables:
 # mode: YAML
