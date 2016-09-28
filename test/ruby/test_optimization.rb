@@ -236,7 +236,7 @@ class TestRubyOptimization < Test::Unit::TestCase
 
   def test_tailcall_with_block
     bug6901 = '[ruby-dev:46065]'
-
+    skip "JIT doesn't interact will tailcalls yet!" if RubyVM::JIT::exists?
     option = {
       tailcall_optimization: true,
       trace_instruction: false,
