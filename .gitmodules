@@ -1,0 +1,6 @@
+[submodule "rbjitglue"]
+	path = rbjitglue
+	url = https://github.com/mgaudet/rbjitglue.git
+[submodule "omr"]
+	path = omr
+	url = https://github.com/mgaudet/omr.git
