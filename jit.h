@@ -36,11 +36,11 @@ struct jit_callbacks_struct {
    /* JIT required callbacks. */ 
    const char *         (*rb_id2name_f)                 (ID id);
    VALUE                (*rb_funcallv_f)                (VALUE, ID, int, const VALUE *);
-   VALUE                (*vm_send_f)                    (rb_thread_t *th, rb_call_info_t *ci, rb_control_frame_t *reg_cfp);
-   VALUE                (*vm_send_without_block_f)      (rb_thread_t *th, rb_call_info_t *ci, VALUE recv);
+   VALUE                (*vm_send_f)                    (rb_thread_t *th, CALL_INFO ci, rb_control_frame_t *reg_cfp);
+   VALUE                (*vm_send_without_block_f)      (rb_thread_t *th, CALL_INFO ci, VALUE recv);
    void                 (*lep_svar_set_f)               (rb_thread_t *th, VALUE *lep, rb_num_t key, VALUE val);
-   VALUE                (*vm_getivar_f)                 (VALUE obj, ID id, IC ic, rb_call_info_t *ci, int is_attr);
-   VALUE                (*vm_setivar_f)                 (VALUE obj, ID id, VALUE val, IC ic, rb_call_info_t *ci, int is_attr);
+   VALUE                (*vm_getivar_f)                 (VALUE obj, ID id, IC ic, CALL_INFO ci, int is_attr);
+   VALUE                (*vm_setivar_f)                 (VALUE obj, ID id, VALUE val, IC ic, CALL_INFO ci, int is_attr);
    VALUE                (*rb_ary_new_capa_f)            (long n);
    VALUE                (*rb_ary_new_from_values_f)     (long n, const VALUE *elts);
    void                 (*vm_expandarray_f)             (rb_control_frame_t *cfp, VALUE ary, rb_num_t num, int flag);
@@ -69,16 +69,16 @@ struct jit_callbacks_struct {
    VALUE                (*rb_ary_tmp_new_f)             (long capa);
    void                 (*rb_ary_store_f)               (VALUE ary, long idx, VALUE val);
    VALUE                (*rb_reg_new_ary_f)             (VALUE ary, int opt);
-   VALUE                (*vm_invokesuper_f)             (rb_thread_t *th, rb_call_info_t *ci, rb_control_frame_t *cfp);
-   VALUE                (*vm_invokeblock_f)             (rb_thread_t *th, rb_call_info_t *ci);
+   VALUE                (*vm_invokesuper_f)             (rb_thread_t *th, CALL_INFO ci, rb_control_frame_t *cfp);
+   VALUE                (*vm_invokeblock_f)             (rb_thread_t *th, CALL_INFO ci);
    rb_block_t *         (*vm_get_block_ptr_f)           (VALUE *ep);
    VALUE                (*rb_class_of_f)                (VALUE obj);
    rb_method_entry_t *  (*rb_method_entry_f)            (VALUE klass, ID id, VALUE *defined_class_ptr);
    void                 (*rb_bug_f)                     (const char *, ...);
    VALUE                (*vm_exec_core_f)               (rb_thread_t *th, VALUE initial);
    const char *         (*rb_class2name_f)              (VALUE klass); 
-   void                 (*vm_send_woblock_jit_inline_frame_f)(rb_thread_t *th, rb_call_info_t *ci, VALUE recv);
-   VALUE                (*vm_send_woblock_inlineable_guard_f)(rb_call_info_t *ci, VALUE klass);
+   void                 (*vm_send_woblock_jit_inline_frame_f)(rb_thread_t *th, CALL_INFO ci, VALUE recv);
+   VALUE                (*vm_send_woblock_inlineable_guard_f)(CALL_INFO ci, VALUE klass);
    void                 (*rb_threadptr_execute_interrupts_f) (rb_thread_t *th, int blocking_timing);
 #ifdef OMR_RUBY_VALID_CLASS
     int                 (*ruby_omr_is_valid_object_f)   (VALUE object);

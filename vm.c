@@ -3321,29 +3321,7 @@ vm_collect_usage_register(int reg, int isset)
 
 extern VALUE rb_cMethod; 
 
-/* Mimics some logic in iseq.c:iseq_s_of(). That function could be refactored to
- * support this...
- */
-rb_iseq_t *
-get_iseq_from_value(VALUE klass, VALUE v) 
-{
-   rb_iseq_t * iseq;
-   rb_secure(1); 
 
-   if (rb_obj_is_proc(v)) { 
-      rb_proc_t *proc;
-      GetProcPtr(v, proc);
-      iseq = proc->block.iseq;
-      if (RUBY_VM_NORMAL_ISEQ_P(iseq)) {
-         return iseq;
-      }
-   }
-   else if ((iseq = rb_method_get_iseq(v)) != 0) {
-      return iseq;
-   }
-   return NULL;
-
-}
 /*
  * call-seq:
  *      RubyVM::JIT::exists? -> boolean
@@ -3374,7 +3352,7 @@ vm_jit_compiled_p(VALUE klass, VALUE method)
 #if defined(JIT_INTERFACE)
    rb_iseq_t * iseq; 
 
-   iseq = get_iseq_from_value(klass,method);  
+   iseq = iseqw_s_of(klass,method);  
    if (iseq && iseq->jit.state == ISEQ_JIT_STATE_JITTED)
       return Qtrue; 
 #endif
@@ -3398,7 +3376,7 @@ vm_jit_compile_method(VALUE klass, VALUE method)
    rb_iseq_t    *iseq; 
    rb_thread_t  *th;
 
-   iseq = get_iseq_from_value(klass,method);
+   iseq = iseqw_s_of(klass,method);
    if (iseq) {
       th   = GET_THREAD();
       return vm_jit(th, iseq);   
