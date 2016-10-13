@@ -12,6 +12,7 @@ PATH_SEPARATOR = @PATH_SEPARATOR@
 #### Start of system configuration section. ####
 
 srcdir = @srcdir@
+abs_srcdir= @abs_srcdir@
 top_srcdir = $(srcdir)
 hdrdir = $(srcdir)/include
 PLATFORM_DIR = @PLATFORM_DIR@
