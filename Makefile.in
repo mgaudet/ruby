@@ -211,7 +211,6 @@ configure_args = @configure_args@
 # OMR JIT Configuration
 
 WITH_OMR_JIT=   @WITH_OMR_JIT@
-$(warning "WITH_OMR_JIT is '$(WITH_OMR_JIT)'")
 
 ifneq ($(WITH_OMR_JIT),)
 
