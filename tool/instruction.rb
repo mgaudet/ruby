@@ -673,21 +673,34 @@ class RubyVM
        
        # mostly for convenience.
        @name          = insn.name
-       @body          = insn.body 
+       @body          = insn.body.dup
 
+       # puts "==============================="
+       # puts "Body pre-analysis: #{insn.name}" 
+       # puts @body
+
+       # puts "-------------------------------"
        # puts "====> insn: #{insn.name}"
        # Ensure we return analyzed
        analyze 
+       # puts "-------------------------------"
+       # puts "Body post-analysis:" 
+       # puts @body
+       # puts "==============================="
 
-       # puts "=======#{insn.name}======"
-       # puts "opes:                 #{insn.opes}"
-       # puts "pops:                 #{insn.pops}"
-       # puts "arguments (computed): #{@arguments}"
-       # puts "====================="
     end
+   
+    def comment str 
+      str
+    end 
 
     def emit
        function = ''
+       function <<  "/* =======#{insn.name}=============== */\n"
+       function <<  "/* opes:                 #{insn.opes} */\n"
+       function <<  "/* pops:                 #{insn.pops} */\n"
+       function <<  "/* arguments (computed): #{@arguments}*/\n"
+       function <<  "/* ===================================*/\n"
        function << emit_signature 
        function << emit_defines 
        function << "{\n"
@@ -775,6 +788,7 @@ class RubyVM
           'GET_PC'                => 'GET_SP()    (th->cfp->pc)',
           'TOPN'                  => "TOPN(x)     (*(th->cfp->sp - (x) - 1 ))",
           'NEXT_INSN'             => "NEXT_INSN() assert(0 && \"NEXT_INSN in a callback doesn't work.\")",
+          'THROW_EXCEPTION'       => "THROW_EXCEPTION(val) assert(0 && val && \"THROW_EXECEPTION in a callback doesn't work yet.\")",
           'JUMP'                  => "JUMP(dst)   assert(0 && \"JUMP      in a callback is broken at the moment\")",
           'INSN_LABEL'            => "INSN_LABEL(lab)  LABEL_#{@name}_##lab",
           'REG_SP'                => "REG_SP (th->cfp->sp)",
@@ -928,7 +942,10 @@ class RubyVM
     end
 
     def emit_body
-       return @body 
+       out = ''
+       out << "/* Start of @body */\n" 
+       out << @body
+       out << "/* end @body */\n"
     end
   
   end 

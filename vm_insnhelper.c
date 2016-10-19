@@ -2752,4 +2752,18 @@ vm_exec_jitted(rb_thread_t *th)
     return val;
 }
 
+VALUE
+vm_send_without_block(rb_thread_t* th, CALL_INFO ci, CALL_CACHE cc, VALUE recv) 
+{
+   /*
+   struct rb_calling_info calling;
+   calling.blockptr = NULL;
+   vm_search_method(ci, cc, calling.recv = TOPN(calling.argc = ci->orig_argc));
+   CALL_METHOD(&calling, ci, cc);
+   */
+   assert(0 && "INCOMPLETE!"); 
+   return 0;
+}
+
+
 #endif /* JIT INTERFACE */

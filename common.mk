@@ -5,7 +5,7 @@ dll: $(LIBRUBY_SO)
 .SUFFIXES: .inc .h .c .y .i .$(DTRACE_EXT)
 
 # V=0 quiet, V=1 verbose.  other values don't work.
-V = 0
+V = 1
 Q1 = $(V:1=)
 Q = $(Q1:0=@)
 ECHO0 = $(ECHO1:0=echo)
@@ -753,7 +753,7 @@ ruby-glommed.$(OBJEXT): $(OBJS)
 
 $(OBJS):  {$(VPATH)}config.h {$(VPATH)}missing.h
 
-INSNS2VMOPT = --srcdir="$(srcdir)"
+INSNS2VMOPT = --srcdir="$(srcdir)" --verbose
 
 {$(VPATH)}minsns.inc: $(srcdir)/template/minsns.inc.tmpl
 
