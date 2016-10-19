@@ -96,8 +96,10 @@ vm_jit_init(rb_vm_t *vm, jit_globals_t globals)
     
     jit->callbacks.rb_id2name_f             = rb_id2name;
     jit->callbacks.rb_funcallv_f            = rb_funcallv;
+    /*
     jit->callbacks.vm_send_f                = vm_send;
     jit->callbacks.vm_send_without_block_f  = vm_send_without_block;
+    */
     jit->callbacks.lep_svar_set_f           = lep_svar_set;
     jit->callbacks.vm_getivar_f             = vm_getivar;
     jit->callbacks.vm_setivar_f             = vm_setivar;
@@ -129,16 +131,20 @@ vm_jit_init(rb_vm_t *vm, jit_globals_t globals)
     jit->callbacks.rb_ary_tmp_new_f         = rb_ary_tmp_new;
     jit->callbacks.rb_ary_store_f           = rb_ary_store;
     jit->callbacks.rb_reg_new_ary_f         = rb_reg_new_ary;
+    /*
     jit->callbacks.vm_invokesuper_f         = vm_invokesuper;
     jit->callbacks.vm_invokeblock_f         = vm_invoke_block_wrapper;
+    */
     jit->callbacks.vm_get_block_ptr_f       = vm_get_block_ptr;
     jit->callbacks.rb_class_of_f            = rb_class_of;
-    jit->callbacks.rb_method_entry_f        = rb_method_entry_get_without_cache;
+    jit->callbacks.rb_method_entry_f        = method_entry_get_without_cache;
     jit->callbacks.rb_bug_f                 = rb_bug;
     jit->callbacks.vm_exec_core_f           = vm_exec_core;
     jit->callbacks.rb_class2name_f          = rb_class2name;
+    /*
     jit->callbacks.vm_send_woblock_jit_inline_frame_f = vm_send_woblock_jit_inline_frame;
     jit->callbacks.vm_send_woblock_inlineable_guard_f = vm_send_woblock_inlineable_guard;
+    */
     jit->callbacks.rb_threadptr_execute_interrupts_f  = rb_threadptr_execute_interrupts;
 #ifdef OMR_RUBY_VALID_CLASS
     jit->callbacks.ruby_omr_is_valid_object_f                   = rb_omr_is_valid_object;

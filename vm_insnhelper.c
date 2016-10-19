@@ -2765,5 +2765,11 @@ vm_send_without_block(rb_thread_t* th, CALL_INFO ci, CALL_CACHE cc, VALUE recv)
    return 0;
 }
 
+static rb_block_t *
+vm_get_block_ptr(VALUE *ep)
+{
+    return (rb_block_t*) (GC_GUARDED_PTR_REF(VM_EP_LEP(ep)[0]));
+}
+
 
 #endif /* JIT INTERFACE */

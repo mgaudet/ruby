@@ -34,6 +34,7 @@ class RubyVM
       @sp_inc = sp_inc
     end
 
+
     def add_sc sci
       @sc << sci
       sci.set_sc
@@ -323,6 +324,7 @@ class RubyVM
         defv  << [opes[i], e]
       }
 
+      # puts "#{ninsn}: defv #{defv}, nopes #{nopes}"
       make_insn_operand_optimized(insn, ninsn, nopes, defv)
     end
 
@@ -675,18 +677,7 @@ class RubyVM
        @name          = insn.name
        @body          = insn.body.dup
 
-       # puts "==============================="
-       # puts "Body pre-analysis: #{insn.name}" 
-       # puts @body
-
-       # puts "-------------------------------"
-       # puts "====> insn: #{insn.name}"
-       # Ensure we return analyzed
        analyze 
-       # puts "-------------------------------"
-       # puts "Body post-analysis:" 
-       # puts @body
-       # puts "==============================="
 
     end
    
@@ -697,11 +688,16 @@ class RubyVM
     def emit
        function = ''
        function <<  "/* =======#{insn.name}=============== */\n"
-       function <<  "/* opes:                 #{insn.opes} */\n"
-       function <<  "/* pops:                 #{insn.pops} */\n"
-       function <<  "/* arguments (computed): #{@arguments}*/\n"
+       function <<  "/* opes:                 #{insn.opes.to_s} */\n"
+       function <<  "/* defopes:              #{insn.defopes.to_s} */\n"
+       function <<  "/* pops:                 #{insn.pops.to_s} */\n"
+       function <<  "/* Comm:                 #{insn.comm.to_s} */\n"
+       function <<  "/* arguments (computed): #{@arguments.to_s}*/\n"
+       function <<  "/* defines   (computed): #{@defines.to_s}*/\n"
+       function <<  "/* return    (computed): #{@return.to_s}*/\n"
        function <<  "/* ===================================*/\n"
        function << emit_signature 
+       # puts @defines
        function << emit_defines 
        function << "{\n"
        function << emit_body
@@ -753,16 +749,55 @@ class RubyVM
        return false
     end
 
+    # Duplicated from not _jit version -- Needs refactoring badly. 
+    def make_header_stack_val_jit insn
+      # puts "DEFOPES (1): #{insn.name} #{insn.defopes.to_s}"
+      vars = insn.opes + insn.pops + insn.defopes.map{|e| e[0]}
+
+      @body.insert(0,"/* end stack push val */\n")
+      insn.rets.each{|var|
+        if vars.all?{|e| e[1] != var[1]} && var[1] != '...'
+          @body.insert(0, "  #{var[0]} #{var[1]};\n")
+        end
+      }
+      @body.insert(0,"/* declare stack push val */\n")
+      # puts "DEFOPES (2): #{insn.name} #{insn.defopes.to_s}"
+    end
+
+
+    def make_header_default_operands_jit insn
+      vars = insn.defopes
+      # puts "DEFOPES(3): #{insn.name} #{vars.to_s}"
+      vars.each{|e|
+        @defines << [e[0][1],"#{e[0][1]} #{e[1]}"] unless e[1] == '*' 
+      }
+    end
+
     def analyze_return
+       make_header_default_operands_jit @insn
+       make_header_stack_val_jit        @insn
+
        if @insn.rets.length == 1
           # Return type
           @return = @insn.rets[0][0]
 
           # Prepend unless conflict with an argument. 
-          @body.insert(0,"    #{@insn.rets[0][0]} #{@insn.rets[0][1]};\n") unless argument_conflict @insn.rets[0]
+          # @body.insert(0,"    #{@insn.rets[0][0]} #{@insn.rets[0][1]};\n") unless argument_conflict @insn.rets[0]
+          #  puts "==============================="
+          #  puts "Body pre-analysis: #{insn.name}" 
+          #  puts @body
+
+          #  puts "-------------------------------"
+          # puts "-------------------------------"
+          # puts "Body post-analysis:" 
+          # puts @body
+          # puts "==============================="
+
+          @body << "\n /* Adding 1 arg return */" 
           @body << "\n    return #{@insn.rets[0][1]};\n"
        else
           #Return type defaults to void
+          @body << "\n /* Adding 0 arg return */" 
           @body << "\n    return;\n"
        end
     end
