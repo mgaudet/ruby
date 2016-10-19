@@ -232,7 +232,7 @@ export RBJITGLUE_DIR
 export RELATIVE_OMR_DIR 
 export OMRDIR
 
-JIT_SO_NAME="librbjit.so"
+JIT_SO_NAME=librbjit.so
 JIT_SO_DIR="$(CURDIR)"
 all_omr_configure_args += --enable-OMR_JIT --disable-OMR_GC
 
@@ -252,11 +252,11 @@ all:
 .NOEXPORT:
 
 ifneq ($(WITH_OMR_JIT),)
-postbuild: jit
+postbuild: $(JIT_SO_NAME)  
 install: jit-install
 uninstall: jit-uninstall
 clean: jit-clean
-all: jit 
+all: $(JIT_SO_NAME) 
 
 omr-configure.stamp: 
 	touch omr-configure.stamp
@@ -285,14 +285,19 @@ omr-clean:
 
 # Recursive JIT make option.
 JIT_PARAOPT ?= -j4 
+JIT_CONFIG ?= debug
 
-jit: jit-prod
-jit-prod: omr-configure.stamp
-	nice $(MAKE) $(JIT_PARAOPT) -C $(RBJITGLUE_DIR)/ruby OMRDIR=$(OMRDIR) RUBY_DIR=$(abs_srcdir) RELATIVE_OMR_DIR=$(RELATIVE_OMR_DIR) RBJITGLUE_DIR=$(RBJITGLUE_DIR) RUBY_IPATH="$(RUBY_IPATH) $(OMR_IPATH) $(OMRGLUE_IPATH)" JIT_DLL_DIR="$(JIT_SO_DIR)" BUILD_CONFIG=prod  
-jit-debug: omr-configure.stamp
-	nice $(MAKE) $(JIT_PARAOPT) -C $(RBJITGLUE_DIR)/ruby OMRDIR=$(OMRDIR) RUBY_DIR=$(abs_srcdir) RELATIVE_OMR_DIR=$(RELATIVE_OMR_DIR) RBJITGLUE_DIR=$(RBJITGLUE_DIR) RUBY_IPATH="$(RUBY_IPATH) $(OMR_IPATH) $(OMRGLUE_IPATH)" JIT_DLL_DIR="$(JIT_SO_DIR)" BUILD_CONFIG=debug 
+$(JIT_SO_NAME): omr-configure.stamp
+	nice $(MAKE) $(JIT_PARAOPT) -C $(RBJITGLUE_DIR)/ruby \
+	   OMRDIR=$(OMRDIR) \
+	   RUBY_DIR=$(abs_srcdir)\
+	   RELATIVE_OMR_DIR=$(RELATIVE_OMR_DIR)\
+	   RBJITGLUE_DIR=$(RBJITGLUE_DIR)\
+	   RUBY_IPATH="$(RUBY_IPATH) $(OMR_IPATH) $(OMRGLUE_IPATH)"\
+	   JIT_DLL_DIR="$(JIT_SO_DIR)"\
+	   BUILD_CONFIG=$(JIT_CONFIG) 
 
-jit-install: jit
+jit-install: $(JIT_SO_NAME) 
 	$(INSTALL) -D $(JIT_SO_DIR)/$(JIT_SO_NAME) $(DESTDIR)$(libdir)/$(JIT_SO_NAME)
 
 jit-uninstall:
@@ -301,7 +306,7 @@ jit-uninstall:
 jit-clean: omr-clean
 	$(MAKE) -C $(RBJITGLUE_DIR)/ruby RUBY_DIR=$(srcdir) OMRDIR=$(OMRDIR) REALTIVE_OMR_DIR=$(OMR_DIR) RBJITGLUE_DIR=$(RBJITGLUE_DIR) JIT_DLL_DIR="$(JIT_SO_DIR)"  clean
 
-.PHONY: jit jit-only jit-install jit-clean
+.PHONY: jit-install jit-clean
 endif
 
 
