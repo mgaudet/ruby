@@ -1660,7 +1660,7 @@ vm_exec2(rb_thread_t *th, VALUE initial)
      */
     if (VM_FRAME_TYPE(th->cfp) != VM_FRAME_MAGIC_RESCUE && 
         VM_FRAME_TYPE_FINISH_P(th->cfp) && 
-        vm_jitted_p(th, th->cfp->iseq) == Qtrue) { 
+        vm_jitted_p(th, (rb_iseq_t*)th->cfp->iseq) == Qtrue) {  //Cast away constness for compiler  -- FIXME: May require redesign. 
 	result = vm_exec_jitted(th);
     }
     else
@@ -3021,7 +3021,7 @@ Init_BareVM(void)
     globals.ruby_vm_global_constant_state_ptr = &ruby_vm_global_constant_state;
     globals.ruby_rb_mRubyVMFrozenCore_ptr     = &rb_mRubyVMFrozenCore;
     globals.ruby_vm_event_flags_ptr           = &ruby_vm_event_flags;
-    globals.redefined_flag_ptr                = &(vm->redefined_flag);
+    globals.redefined_flag_ptr                = vm->redefined_flag;
     vm_jit_init(vm, globals);
 #endif
     vm->objspace = rb_objspace_alloc();
@@ -3340,6 +3340,8 @@ vm_jit_exists_p()
    return Qfalse;
 }
 
+VALUE iseqw_s_of(VALUE klass, VALUE body);
+
 /*
  * call-seq:
  *    RubyVM::JIT::compiled?(method)   -> boolean 
@@ -3352,7 +3354,7 @@ vm_jit_compiled_p(VALUE klass, VALUE method)
 #if defined(JIT_INTERFACE)
    rb_iseq_t * iseq; 
 
-   iseq = iseqw_s_of(klass,method);  
+   iseq = (rb_iseq_t*)iseqw_s_of(klass,method);  
    if (iseq && iseq->jit.state == ISEQ_JIT_STATE_JITTED)
       return Qtrue; 
 #endif
@@ -3376,7 +3378,7 @@ vm_jit_compile_method(VALUE klass, VALUE method)
    rb_iseq_t    *iseq; 
    rb_thread_t  *th;
 
-   iseq = iseqw_s_of(klass,method);
+   iseq = (rb_iseq_t*)iseqw_s_of(klass,method);
    if (iseq) {
       th   = GET_THREAD();
       return vm_jit(th, iseq);   

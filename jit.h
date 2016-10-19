@@ -145,7 +145,7 @@ struct rb_jit_struct {
     void  (*terminate_f)(rb_vm_t *vm);
 
    /** Compile a given instruction sequence */  
-    void* (*compile_f)(rb_iseq_t *iseq);
+    void* (*compile_f)(const rb_iseq_t *iseq);
 
    /** Dispatch to compiled code. */
     VALUE (*dispatch_f)(rb_thread_t *th, jit_method_t code);
@@ -171,6 +171,6 @@ void  vm_jit_destroy(rb_vm_t *vm);
 /**
  * Compile an instruction sequence
  */
-void *vm_jit_compile(rb_vm_t *vm, rb_iseq_t *iseq);
+void *vm_jit_compile(rb_vm_t *vm, const rb_iseq_t *iseq);
 
 #endif
