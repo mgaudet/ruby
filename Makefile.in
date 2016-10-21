@@ -256,16 +256,13 @@ postbuild: $(JIT_SO_NAME)
 install: jit-install
 uninstall: jit-uninstall
 clean: jit-clean
-all: $(JIT_SO_NAME) 
 
 omr-configure.stamp: 
 	touch omr-configure.stamp
 	$(MAKE) omr-configure
 
 omr-configure:
-	$(CHDIR) $(RELATIVE_OMR_DIR)
-	./configure OMRDIR=$(OMRDIR) SPEC="$(SPEC)" OMRGLUE="$(RBJITGLUE_DIR)" OMRGLUE_INCLUDES="$(RUBY_IPATH)" OMRGLUE_CXXFLAGS="-Wno-error" OMRGLUE_CFLAGS="-Wno-error" $(all_omr_configure_args)
-	$(CHDIR) $(srcdir)
+	$(CHDIR) $(RELATIVE_OMR_DIR) && pwd && ./configure OMRDIR=$(OMRDIR) SPEC="$(SPEC)" OMRGLUE="$(RBJITGLUE_DIR)" OMRGLUE_INCLUDES="$(RUBY_IPATH)" OMRGLUE_CXXFLAGS="-Wno-error" OMRGLUE_CFLAGS="-Wno-error" $(all_omr_configure_args) && $(CHDIR) $(abs_srcdir)
 
 omr: omr-configure.stamp
 	$(MAKE) id.h
@@ -276,7 +273,7 @@ omr-clean:
 	-$(MAKE) -C $(OMRDIR) clean
 	-$(MAKE) -C $(OMRDIR) -f run_configure.mk OMRGLUE="$(RBJIT_GLUE_DIR)" clean
 
-.PHONY: omr omr-clean
+.PHONY: omr omr-clean 
 
 
 
@@ -288,7 +285,7 @@ JIT_PARAOPT ?= -j4
 JIT_CONFIG ?= debug
 
 $(JIT_SO_NAME): omr-configure.stamp
-	nice $(MAKE) $(JIT_PARAOPT) -C $(RBJITGLUE_DIR)/ruby \
+	$(MAKE) $(JIT_PARAOPT) -C $(RBJITGLUE_DIR)/ruby \
 	   OMRDIR=$(OMRDIR) \
 	   RUBY_DIR=$(abs_srcdir)\
 	   RELATIVE_OMR_DIR=$(RELATIVE_OMR_DIR)\
@@ -304,7 +301,14 @@ jit-uninstall:
 	$(RM) $(DESTDIR)$(libdir)/$(JIT_SO_NAME)
 
 jit-clean: omr-clean
-	$(MAKE) -C $(RBJITGLUE_DIR)/ruby RUBY_DIR=$(srcdir) OMRDIR=$(OMRDIR) REALTIVE_OMR_DIR=$(OMR_DIR) RBJITGLUE_DIR=$(RBJITGLUE_DIR) JIT_DLL_DIR="$(JIT_SO_DIR)"  clean
+	$(MAKE) $(JIT_PARAOPT) -C $(RBJITGLUE_DIR)/ruby \
+	   OMRDIR=$(OMRDIR) \
+	   RUBY_DIR=$(abs_srcdir)\
+	   RELATIVE_OMR_DIR=$(RELATIVE_OMR_DIR)\
+	   RBJITGLUE_DIR=$(RBJITGLUE_DIR)\
+	   RUBY_IPATH="$(RUBY_IPATH) $(OMR_IPATH) $(OMRGLUE_IPATH)"\
+	   JIT_DLL_DIR="$(JIT_SO_DIR)"\
+	   BUILD_CONFIG=$(JIT_CONFIG) clean
 
 .PHONY: jit-install jit-clean
 endif

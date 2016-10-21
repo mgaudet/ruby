@@ -36,8 +36,10 @@ struct jit_callbacks_struct {
    /* JIT required callbacks. */ 
    const char *         (*rb_id2name_f)                 (ID id);
    VALUE                (*rb_funcallv_f)                (VALUE, ID, int, const VALUE *);
+   /*
    VALUE                (*vm_send_f)                    (rb_thread_t *th, CALL_INFO ci, rb_control_frame_t *reg_cfp);
    VALUE                (*vm_send_without_block_f)      (rb_thread_t *th, CALL_INFO ci, VALUE recv);
+   */
    void                 (*lep_svar_set_f)               (rb_thread_t *th, VALUE *lep, rb_num_t key, VALUE val);
    VALUE                (*vm_getivar_f)                 (VALUE obj, ID id, IC ic, struct rb_call_cache* cc, int is_attr);
    VALUE                (*vm_setivar_f)                 (VALUE obj, ID id, VALUE val, IC ic, struct rb_call_cache* cc, int is_attr);
