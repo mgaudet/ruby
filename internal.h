@@ -558,7 +558,7 @@ enum imemo_type {
 static inline enum imemo_type
 imemo_type(VALUE imemo)
 {
-    return (imemo_type)( (RBASIC(imemo)->flags >> FL_USHIFT) & imemo_mask );
+    return (enum imemo_type)( (RBASIC(imemo)->flags >> FL_USHIFT) & imemo_mask  )  ;
 }
 
 /* FL_USER0 to FL_USER2 is for type */
