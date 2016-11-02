@@ -823,7 +823,7 @@ class RubyVM
           'GET_PC'                => 'GET_SP()    (th->cfp->pc)',
           'TOPN'                  => "TOPN(x)     (*(th->cfp->sp - (x) - 1 ))",
           'NEXT_INSN'             => "NEXT_INSN() assert(0 && \"NEXT_INSN in a callback doesn't work.\")",
-          'THROW_EXCEPTION'       => "THROW_EXCEPTION(val) assert(0 && val && \"THROW_EXECEPTION in a callback doesn't work yet.\")",
+          #'THROW_EXCEPTION'       => "THROW_EXCEPTION(val) assert(0 && val && \"THROW_EXECEPTION in a callback doesn't work yet.\")",
           'JUMP'                  => "JUMP(dst)   assert(0 && \"JUMP      in a callback is broken at the moment\")",
           'INSN_LABEL'            => "INSN_LABEL(lab)  LABEL_#{@name}_##lab",
           'REG_SP'                => "REG_SP (th->cfp->sp)",
