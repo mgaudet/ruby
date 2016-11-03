@@ -2752,17 +2752,33 @@ vm_exec_jitted(rb_thread_t *th)
     return val;
 }
 
+static VALUE vm_exec(rb_thread_t *th);
+
 VALUE
 vm_send_without_block(rb_thread_t* th, CALL_INFO ci, CALL_CACHE cc, VALUE recv) 
 {
-   /*
+   VALUE val;
+   int from_jit = VM_FRAME_TYPE_JITTED_P(th->cfp);
    struct rb_calling_info calling;
+   rb_control_frame_t *const reg_cfp = th->cfp;  /* Used for TOPN */ 
+
    calling.blockptr = NULL;
    vm_search_method(ci, cc, calling.recv = TOPN(calling.argc = ci->orig_argc));
-   CALL_METHOD(&calling, ci, cc);
-   */
-   assert(0 && "INCOMPLETE!"); 
-   return 0;
+   val  = (*(cc)->call)(th, GET_CFP(), &calling, ci, cc); 
+
+   if (val == Qundef) {
+	/* undef implies that send only did a frame setup.
+	   we need invovke vm_exec */
+
+        if (from_jit ||
+            vm_jitted_p(th, th->cfp->iseq) == Qtrue) {
+
+            th->cfp->flag |= VM_FRAME_FLAG_FINISH;
+            val = vm_exec(th);
+        }
+        
+    }
+   return val;
 }
 
 static rb_block_t *
@@ -2770,6 +2786,5 @@ vm_get_block_ptr(VALUE *ep)
 {
     return (rb_block_t*) (GC_GUARDED_PTR_REF(VM_EP_LEP(ep)[0]));
 }
-
 
 #endif /* JIT INTERFACE */
