@@ -1,5 +1,68 @@
-[![Build Status](https://travis-ci.org/ruby/ruby.svg)](https://travis-ci.org/ruby/ruby)
-[![Build status](https://ci.appveyor.com/api/projects/status/0sy8rrxut4o0k960/branch/trunk?svg=true)](https://ci.appveyor.com/project/ruby/ruby/branch/trunk)
+# Ruby+OMR 
+
+This branch contains a modified version of the Ruby VM that has been altered to
+interact with the [Eclipse OMR](https://github.com/eclipse/omr) compiler technolgy 
+in order to add a Just-In-Time compiler to Ruby. 
+
+## Status: 
+
+As of today, this branch has only been tested on Linux x86-64. When run with 
+
+    OMR_JIT_OPTIONS='-Xjit:count=0' 
+
+Which attempts to compile methods before invoking them even once, in some sense a 
+stress test mode, the current status is `make test` passes, however, `make
+test-all` fails.
+
+
+## Building Ruby + OMR
+
+Simplified steps to build Ruby + OMR.  See more detailed instructions below to
+modify the install location, etc.
+
+```
+$ git clone https://github.com/rubyomr-preview/ruby.git --branch ruby_2_2_omr --recursive 
+$ cd ruby
+$ autoconf
+$ ./configure SPEC=<specname> --with-omr-jit
+$ make
+$ make install
+```
+
+Since the Ruby + OMR code has only been tested on Linux x86-64, Linux PPC-LE-64, Linux PPC-BE-64
+and Linux 390-64 the acceptable values for `<specname>` are:
+
+```
+1. linux_x86-64
+2. linux_ppc-64_le_gcc
+3. linux_ppc-64
+4. linux_390-64
+```
+
+## Running with the JIT compiler
+
+Use the environment variable `OMR_JIT_OPTIONS` to pass options; Be sure to start the variable
+with `-Xjit:` to activate the JIT.  
+
+Some options of interest: 
+
+| `-Xjit:` option        | Description                                                          | 
+|------------------------|----------------------------------------------------------------------| 
+| `count=`_N_.           | How many times a method needs to be invoked before it is compiled.   | 
+| `verbose`              |  Outputs compilation decisions to `stdout`                           |
+| `vlog=`_file_          |  Redirect compilation decision output to _file_                      |
+| `tracefull,log=`_file_ | Produce a compilation log at _file_, suffixed with PID               |
+
+### Running without installing
+
+If you haven't run `make install`, the dynamic loader will complain. Tell it where to find 
+`librbjit` by pointing `LD_LIBRARY_PATH` to this directory.
+
+So, running `make test` without installing: 
+
+    LD_LIBRARY_PATH=$PWD OMR_JIT_OPTIONS=-Xjit:count=0 make test
+
+
 
 # What's Ruby
 

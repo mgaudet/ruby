@@ -5,7 +5,7 @@ dll: $(LIBRUBY_SO)
 .SUFFIXES: .inc .h .c .y .i .$(DTRACE_EXT)
 
 # V=0 quiet, V=1 verbose.  other values don't work.
-V = 0
+V?=0
 Q1 = $(V:1=)
 Q = $(Q1:0=@)
 ECHO0 = $(ECHO1:0=echo)
@@ -68,6 +68,12 @@ ENC_MK        = enc.mk
 MAKE_ENC      = -f $(ENC_MK) V="$(V)" UNICODE_HDR_DIR="$(UNICODE_HDR_DIR)" \
 		RUBY="$(MINIRUBY)" MINIRUBY="$(MINIRUBY)" $(MFLAGS)
 
+ifdef WITH_OMR_JIT
+   JITOBJS = omr_jit.$(OBJEXT)
+else
+   JITOBJS = no_jit.$(OBJEXT)
+endif
+
 COMMONOBJS    = array.$(OBJEXT) \
 		bignum.$(OBJEXT) \
 		class.$(OBJEXT) \
@@ -129,6 +135,7 @@ COMMONOBJS    = array.$(OBJEXT) \
 		vm_dump.$(OBJEXT) \
 		vm_trace.$(OBJEXT) \
 		$(DTRACE_OBJ) \
+		$(JITOBJS) \
 		$(BUILTIN_ENCOBJS) \
 		$(BUILTIN_TRANSOBJS) \
 		$(MISSING)
@@ -2551,6 +2558,7 @@ vm.$(OBJEXT): {$(VPATH)}intern.h
 vm.$(OBJEXT): {$(VPATH)}internal.h
 vm.$(OBJEXT): {$(VPATH)}io.h
 vm.$(OBJEXT): {$(VPATH)}iseq.h
+vm.$(OBJEXT): {$(VPATH)}jit.h
 vm.$(OBJEXT): {$(VPATH)}method.h
 vm.$(OBJEXT): {$(VPATH)}missing.h
 vm.$(OBJEXT): {$(VPATH)}node.h
@@ -2567,6 +2575,7 @@ vm.$(OBJEXT): {$(VPATH)}thread_native.h
 vm.$(OBJEXT): {$(VPATH)}vm.c
 vm.$(OBJEXT): {$(VPATH)}vm.h
 vm.$(OBJEXT): {$(VPATH)}vm.inc
+vm.$(OBJEXT): {$(VPATH)}vm_jit.inc
 vm.$(OBJEXT): {$(VPATH)}vm_args.c
 vm.$(OBJEXT): {$(VPATH)}vm_call_iseq_optimized.inc
 vm.$(OBJEXT): {$(VPATH)}vm_core.h

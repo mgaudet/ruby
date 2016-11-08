@@ -132,6 +132,19 @@ enum vm_regan_acttype {
     } \
 } while (0)
 
+
+#define CHECK_CALL_RETVAL(v) \
+    do {                                        \
+        if ((v) == Qundef) {                    \
+            RESTORE_REGS();                     \
+            NEXT_INSN();                        \
+        }                                       \
+        else {                                  \
+            val = (v);                          \
+        }                                       \
+    } while (0)
+
+
 /* set fastpath when cached method is *NOT* protected
  * because inline method cache does not care about receiver.
  */

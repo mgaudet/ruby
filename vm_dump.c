@@ -33,7 +33,7 @@ control_frame_dump(rb_thread_t *th, rb_control_frame_t *cfp)
     char posbuf[MAX_POSBUF+1];
     int line = 0;
 
-    const char *magic, *iseq_name = "-", *selfstr = "-", *biseq_name = "-";
+    const char *magic, *iseq_name = "-", *selfstr = "-", *biseq_name = "-", *jitted = "-";
     VALUE tmp;
 
     const rb_callable_method_entry_t *me;
@@ -82,6 +82,10 @@ control_frame_dump(rb_thread_t *th, rb_control_frame_t *cfp)
 	break;
     }
 
+    if (VM_FRAME_JITTED_P(cfp)) {
+       jitted = "J";
+    } 
+
     if (0) {
 	tmp = rb_inspect(cfp->self);
 	selfstr = StringValueCStr(tmp);
@@ -127,6 +131,7 @@ control_frame_dump(rb_thread_t *th, rb_control_frame_t *cfp)
     fprintf(stderr, "s:%04"PRIdPTRDIFF" ", cfp->sp - th->stack);
     fprintf(stderr, ep_in_heap == ' ' ? "e:%06"PRIdPTRDIFF" " : "E:%06"PRIxPTRDIFF" ", ep % 10000);
     fprintf(stderr, "%-6s", magic);
+    fprintf(stderr, " %s", jitted);
     if (line) {
 	fprintf(stderr, " %s", posbuf);
     }

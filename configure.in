@@ -445,6 +445,100 @@ AC_ARG_ENABLE(load-relative,
 
 AC_ARG_PROGRAM
 
+# OMR JIT Configuration
+AC_ARG_VAR([SPEC],
+  [OMR Spec type. Mandatory])
+
+AC_DEFUN([OMR_ABS_PATH],
+# OMRTODO doesn't work on windows
+  [case $2 in
+   /*) # Absolute
+    ;;
+   *)
+    $1=`pwd`/$2 ;;
+   esac])
+
+
+AC_MSG_CHECKING([for --with-omr-jit])
+
+AC_ARG_VAR([RBJITGLUE_DIR],
+  [path to Ruby JIT glue code. defaults to rbjitglue])
+
+AC_ARG_VAR([RELATIVE_OMR_DIR],
+  [path to omr component Relative to VM, defaults to omr])
+
+AC_ARG_WITH([omr-jit],
+  [AS_HELP_STRING([--with-omr-jit],
+     [Enable or disable the OMR JIT])],
+  [],
+  [with_omr_jit=yes])
+
+AC_SUBST([WITH_OMR_JIT])
+
+AS_IF([test "x$with_omr_jit" = "xyes"],
+   [
+   # Ensure spec is defined
+   AS_IF([test "x$SPEC" = "x"],
+     [AC_MSG_ERROR([invalid value '${SPEC}' for \$SPEC], [-1])],
+     [])
+
+
+   WITH_OMR_JIT=$with_omr_jit
+
+   # OMR_JIT is defined by the OMR project -- we use JIT_OMR 
+   # here instead to avoid having a definition clash, while also
+   # allowing this to get baked in to the ruby config stuff. 
+   AC_DEFINE(JIT_OMR)
+   AC_DEFINE(JIT_INTERFACE)
+   AC_DEFINE(RUBY_SEND_WITHOUT_BLOCK)
+
+   # If RBJITGLUE_DIR isn't defined, set to default
+   AS_IF([test "x$RBJITGLUE_DIR" = "x"],
+     [RBJITGLUE_DIR="rbjitglue"],
+     [])
+
+   AS_IF([test "x$RELATIVE_OMR_DIR" = "x"], 
+         [RELATIVE_OMR_DIR="omr"],
+     [])
+
+
+   AC_MSG_RESULT([yes: SPEC=$SPEC RBJITGLUE_DIR=$RBJITGLUE_DIR RELATIVE_OMR_DIR=$RELATIVE_OMR_DIR])
+
+   AS_IF([test -d "$RBJITGLUE_DIR/ruby/build"],
+         [],
+         [AC_MSG_ERROR([RBJITGLUE_DIR misconfigured, cannot find directory $RBJITGLUE_DIR/build])])
+
+   AS_IF([test -d "$RELATIVE_OMR_DIR/compiler"],
+         [],
+         [AC_MSG_ERROR([RELATIVE_OMR_DIR misconfigured, cannot find directory $RELATIVE_OMR_DIR/compiler])])
+
+   ],
+  [AC_MSG_RESULT([no])])
+
+ 
+# OMR JIT Profiling Configuration
+AC_MSG_CHECKING([for --with-omr-jit-profiling])
+
+AC_ARG_WITH([omr-jit-profiling],
+  [AS_HELP_STRING([--with-omr-jit-profiling],
+     [Enable or disable Profiling for use with the OMR JIT])],
+  [],
+  [with_omr_jit_profiling=no])
+
+AC_SUBST([WITH_OMR_JIT_PROFILING])
+  
+AS_IF([test "x$with_omr_jit" = "xyes" && test "x$with_omr_jit_profiling" = "xyes"],
+      [
+      WITH_OMR_JIT_PROFILING=$with_omr_jit_profiling
+         
+      #Define OMR_JIT_PROFILING in config.h
+         
+      AC_DEFINE(OMR_JIT_PROFILING)
+      AC_MSG_RESULT([yes])
+      ],
+      [AC_MSG_RESULT([no])])
+
+
 dnl Checks for programs.
 
 cflagspat=

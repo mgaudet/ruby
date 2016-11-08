@@ -960,11 +960,16 @@ send
 (...)
 (VALUE val) // inc += - (int)(ci->orig_argc + ((ci->flag & VM_CALL_ARGS_BLOCKARG) ? 1 : 0));
 {
+#if defined(JIT_INTERFACE) 
+   VALUE v = vm_send(th, ci, cc, blockiseq, reg_cfp); 
+   CHECK_CALL_RETVAL(v); 
+#else 
     struct rb_calling_info calling;
 
     vm_caller_setup_arg_block(th, reg_cfp, &calling, ci, blockiseq, FALSE);
     vm_search_method(ci, cc, calling.recv = TOPN(calling.argc = ci->orig_argc));
     CALL_METHOD(&calling, ci, cc);
+#endif
 }
 
 DEFINE_INSN
@@ -1060,10 +1065,15 @@ opt_send_without_block
 (...)
 (VALUE val) // inc += -ci->orig_argc;
 {
+#if defined(JIT_INTERFACE) 
+   VALUE v = vm_send_without_block(th, ci, cc, TOPN(ci->orig_argc)); 
+   CHECK_CALL_RETVAL(v); 
+#else 
     struct rb_calling_info calling;
     calling.block_handler = VM_BLOCK_HANDLER_NONE;
     vm_search_method(ci, cc, calling.recv = TOPN(calling.argc = ci->orig_argc));
     CALL_METHOD(&calling, ci, cc);
+#endif
 }
 
 /**
@@ -1077,6 +1087,10 @@ invokesuper
 (...)
 (VALUE val) // inc += - (int)(ci->orig_argc + ((ci->flag & VM_CALL_ARGS_BLOCKARG) ? 1 : 0));
 {
+#if defined(JIT_INTERFACE)
+    VALUE v = vm_invokesuper(th, ci, cc, blockiseq, reg_cfp);
+    CHECK_CALL_RETVAL(v);
+#else  
     struct rb_calling_info calling;
     calling.argc = ci->orig_argc;
 
@@ -1084,6 +1098,7 @@ invokesuper
     calling.recv = GET_SELF();
     vm_search_super_method(th, GET_CFP(), &calling, ci, cc);
     CALL_METHOD(&calling, ci, cc);
+#endif /* defined(JIT_INTERFACE) */ 
 }
 
 /**
@@ -1097,6 +1112,10 @@ invokeblock
 (...)
 (VALUE val)  // inc += 1 - ci->orig_argc;
 {
+#if defined(JIT_INTERFACE)
+    VALUE v = vm_invoke_block_wrapper(th, ci);
+    CHECK_CALL_RETVAL(v);
+#else
     struct rb_calling_info calling;
     calling.argc = ci->orig_argc;
     calling.block_handler = VM_BLOCK_HANDLER_NONE;
@@ -1107,6 +1126,7 @@ invokeblock
 	RESTORE_REGS();
 	NEXT_INSN();
     }
+#endif /* defined(JIT_INTERFACE) */ 
 }
 
 /**

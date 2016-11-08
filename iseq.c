@@ -1655,7 +1655,7 @@ iseqw_disasm(VALUE self)
  *	> RubyVM::InstructionSequence.of($a_global_proc)
  *	> #=> #<RubyVM::InstructionSequence:0x007fb73d7caf78>
  */
-static VALUE
+VALUE
 iseqw_s_of(VALUE klass, VALUE body)
 {
     const rb_iseq_t *iseq = NULL;
