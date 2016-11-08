@@ -12,6 +12,7 @@ PATH_SEPARATOR = @PATH_SEPARATOR@
 #### Start of system configuration section. ####
 
 srcdir = @srcdir@
+abs_srcdir= @abs_srcdir@
 top_srcdir = $(srcdir)
 hdrdir = $(srcdir)/include
 PLATFORM_DIR = @PLATFORM_DIR@
@@ -67,6 +68,8 @@ optflags = @optflags@
 debugflags = @debugflags@
 warnflags = @warnflags@ @strict_warnflags@
 cppflags = @cppflags@
+incdirs = . $(arch_hdrdir) $(hdrdir) $(srcdir)
+INCFLAGS = $(patsubst %,-I%,$(incdirs) $(OMR_IPATH) $(OMRGLUE_IPATH))
 XCFLAGS = @XCFLAGS@
 CPPFLAGS = @CPPFLAGS@ $(INCFLAGS)
 LDFLAGS = @STATIC@ $(CFLAGS) @LDFLAGS@
@@ -206,6 +209,41 @@ ECHO_END = ; do echo @ECHO_N@ "$$sep'$$word'@ECHO_C@"; sep=' '; done; echo
 DESTDIR       = @DESTDIR@
 
 configure_args = @configure_args@
+
+# OMR JIT Configuration
+
+WITH_OMR_JIT=   @WITH_OMR_JIT@
+
+ifneq ($(WITH_OMR_JIT),)
+
+export SPEC = @SPEC@
+
+RUBY_IPATH = \
+  $(abs_srcdir) \
+  $(abs_srcdir)/$(arch_hdrdir) \
+  $(abs_srcdir)/$(srcdir) \
+  $(abs_srcdir)/$(hdrdir)
+
+
+LIBS+=-ldl
+
+RBJITGLUE_DIR?=@RBJITGLUE_DIR@
+RELATIVE_OMR_DIR?=@RELATIVE_OMR_DIR@
+OMRDIR?=$(CURDIR)/$(RELATIVE_OMR_DIR)
+export RBJITGLUE_DIR 
+export RELATIVE_OMR_DIR 
+export OMRDIR
+
+JIT_SO_NAME=librbjit.so
+JIT_SO_DIR="$(CURDIR)"
+all_omr_configure_args += --enable-OMR_JIT --disable-OMR_GC
+
+-include $(RELATIVE_OMR_DIR)/omrmakefiles/omr_defs.mk
+
+endif # WITH_OMR_JIT
+
+
+
 #### End of variables
 
 .SUFFIXES: .inc .h .c .y .i .$(DTRACE_EXT)
@@ -214,6 +252,69 @@ all:
 
 # Prevent GNU make v3 from overflowing arg limit on SysV.
 .NOEXPORT:
+
+ifneq ($(WITH_OMR_JIT),)
+postbuild: $(JIT_SO_NAME)  
+install: jit-install
+uninstall: jit-uninstall
+clean: jit-clean
+
+omr-configure.stamp: 
+	touch omr-configure.stamp
+	$(MAKE) omr-configure
+
+omr-configure:
+	$(CHDIR) $(RELATIVE_OMR_DIR) && pwd && ./configure OMRDIR=$(OMRDIR) SPEC="$(SPEC)" OMRGLUE="$(RBJITGLUE_DIR)" OMRGLUE_INCLUDES="$(RUBY_IPATH)" OMRGLUE_CXXFLAGS="-Wno-error" OMRGLUE_CFLAGS="-Wno-error" $(all_omr_configure_args) && $(CHDIR) $(abs_srcdir)
+
+omr: omr-configure.stamp
+	$(MAKE) id.h
+	$(MAKE) -C $(OMRDIR)
+
+omr-clean:
+	-rm omr-configure.stamp 
+	-$(MAKE) -C $(OMRDIR) clean
+	-$(MAKE) -C $(OMRDIR) -f run_configure.mk OMRGLUE="$(RBJIT_GLUE_DIR)" clean
+
+.PHONY: omr omr-clean 
+
+
+
+
+# JIT  
+
+# Recursive JIT make option.
+JIT_PARAOPT ?= -j4 
+JIT_CONFIG ?= debug
+
+$(JIT_SO_NAME): omr-configure.stamp
+	$(MAKE) $(JIT_PARAOPT) -C $(RBJITGLUE_DIR)/ruby \
+	   OMRDIR=$(OMRDIR) \
+	   RUBY_DIR=$(abs_srcdir)\
+	   RELATIVE_OMR_DIR=$(RELATIVE_OMR_DIR)\
+	   RBJITGLUE_DIR=$(RBJITGLUE_DIR)\
+	   RUBY_IPATH="$(RUBY_IPATH) $(OMR_IPATH) $(OMRGLUE_IPATH)"\
+	   JIT_DLL_DIR="$(JIT_SO_DIR)"\
+	   BUILD_CONFIG=$(JIT_CONFIG) 
+
+jit-install: $(JIT_SO_NAME) 
+	$(INSTALL) -D $(JIT_SO_DIR)/$(JIT_SO_NAME) $(DESTDIR)$(libdir)/$(JIT_SO_NAME)
+
+jit-uninstall:
+	$(RM) $(DESTDIR)$(libdir)/$(JIT_SO_NAME)
+
+jit-clean: omr-clean
+	$(MAKE) $(JIT_PARAOPT) -C $(RBJITGLUE_DIR)/ruby \
+	   OMRDIR=$(OMRDIR) \
+	   RUBY_DIR=$(abs_srcdir)\
+	   RELATIVE_OMR_DIR=$(RELATIVE_OMR_DIR)\
+	   RBJITGLUE_DIR=$(RBJITGLUE_DIR)\
+	   RUBY_IPATH="$(RUBY_IPATH) $(OMR_IPATH) $(OMRGLUE_IPATH)"\
+	   JIT_DLL_DIR="$(JIT_SO_DIR)"\
+	   BUILD_CONFIG=$(JIT_CONFIG) clean
+
+.PHONY: jit-install jit-clean
+endif
+
 
 miniruby$(EXEEXT):
 		@-if test -f $@; then $(MV) -f $@ $@.old; $(RM) $@.old; fi
@@ -530,6 +631,15 @@ update-coverage: update-simplecov update-simplecov-html update-doclie
 
 INSNS	= opt_sc.inc optinsn.inc optunifs.inc insns.inc insns_info.inc \
 	  vmtc.inc vm.inc
+
+ifneq ($(WITH_OMR_JIT),)
+INSNS   += vm_jit.inc vm_jit_callbacks.inc vm_jit_initializations.inc vm_jit_forward.inc
+
+inc-clean: 
+	- rm $(INSNS)
+
+vm.$(OBJEXT): $(INSNS)
+endif
 
 $(INSNS): $(srcdir)/insns.def vm_opts.h \
 	  $(srcdir)/defs/opt_operand.def $(srcdir)/defs/opt_insn_unif.def \

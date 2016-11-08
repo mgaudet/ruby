@@ -269,8 +269,7 @@ typedef struct rb_iseq_location_struct {
     VALUE first_lineno; /* TODO: may be unsigned short */
 } rb_iseq_location_t;
 
-struct rb_iseq_constant_body {
-    enum iseq_type {
+typedef enum iseq_type {
 	ISEQ_TYPE_TOP,
 	ISEQ_TYPE_METHOD,
 	ISEQ_TYPE_BLOCK,
@@ -280,8 +279,30 @@ struct rb_iseq_constant_body {
 	ISEQ_TYPE_EVAL,
 	ISEQ_TYPE_MAIN,
 	ISEQ_TYPE_DEFINED_GUARD
-    } type;              /* instruction sequence type */
+} iseq_type;              /* instruction sequence type */
 
+#if defined(JIT_OMR)
+typedef enum iseq_jit_state {
+    ISEQ_JIT_STATE_ZERO = 0, /* un-initialized */
+    ISEQ_JIT_STATE_INTERPRETED,
+    ISEQ_JIT_STATE_BLACKLISTED, /* don't try to jit */
+    ISEQ_JIT_STATE_RECOMP_BLACKLISTED, /* don't try to recompile */
+    ISEQ_JIT_STATE_JITTED
+} iseq_jit_state;
+
+typedef struct iseq_jit_body_info {
+    int opt_level;
+    long recomp_count;
+    unsigned long invoke_count;
+    void *startPC;
+    struct iseq_jit_body_info *prev;
+    struct iseq_jit_body_info *next;
+} iseq_jit_body_info;
+#endif
+
+
+struct rb_iseq_constant_body {
+    iseq_type type; 
     unsigned int iseq_size;
     const VALUE *iseq_encoded; /* encoded iseq (insn addr and operands) */
 
@@ -393,6 +414,19 @@ struct rb_iseq_struct {
     VALUE flags;
     VALUE reserved1;
     struct rb_iseq_constant_body *body;
+
+#if defined(JIT_OMR)
+    struct {
+        iseq_jit_state state;
+        union {
+            long     count; /* number of interpretations (state == ISEQ_JIT_STATE_INT) */
+            void    *code;  /* address of jitted code (state == ISEQ_JIT_STATE_JITTED) */
+            /* OMR:TODO: we need multiple entry points to deal with complex args */
+        } u;
+        iseq_jit_body_info *body_info;
+    } jit;
+#endif
+
 
     union { /* 4, 5 words */
 	struct iseq_compile_data *compile_data; /* used at compile time */
@@ -554,6 +588,9 @@ typedef struct rb_vm_struct {
     } default_params;
 
     short redefined_flag[BOP_LAST_];
+#if defined(JIT_OMR)
+    struct rb_jit_struct *jit;
+#endif
 } rb_vm_t;
 
 /* default values */
@@ -979,6 +1016,9 @@ enum {
     VM_FRAME_FLAG_FINISH    = 0x0020,
     VM_FRAME_FLAG_BMETHOD   = 0x0040,
     VM_FRAME_FLAG_CFRAME    = 0x0080,
+    #ifdef JIT_OMR
+    VM_FRAME_FLAG_JITTED    = 0x0100, 
+    #endif
 
     /* env flag */
     VM_ENV_FLAG_LOCAL       = 0x0002,
@@ -1041,6 +1081,16 @@ VM_FRAME_BMETHOD_P(const rb_control_frame_t *cfp)
 }
 
 static inline int
+VM_FRAME_JITTED_P(const rb_control_frame_t *cfp)
+{
+#ifdef JIT_OMR
+    return VM_ENV_FLAGS(cfp->ep, VM_FRAME_FLAG_JITTED) != 0;
+#else 
+    return 0;
+#endif
+}
+
+static inline int
 rb_obj_is_iseq(VALUE iseq)
 {
     return RB_TYPE_P(iseq, T_IMEMO) && imemo_type(iseq) == imemo_iseq;
@@ -1080,7 +1130,7 @@ static inline const VALUE *
 VM_ENV_PREV_EP(const VALUE *ep)
 {
     VM_ASSERT(VM_ENV_LOCAL_P(ep) == 0);
-    return GC_GUARDED_PTR_REF(ep[VM_ENV_DATA_INDEX_SPECVAL]);
+    return (VALUE*)GC_GUARDED_PTR_REF(ep[VM_ENV_DATA_INDEX_SPECVAL]);
 }
 
 static inline VALUE
@@ -1204,7 +1254,7 @@ VM_BH_FROM_ISEQ_BLOCK(const struct rb_captured_block *captured)
 static inline const struct rb_captured_block *
 VM_BH_TO_ISEQ_BLOCK(VALUE block_handler)
 {
-    struct rb_captured_block *captured = VM_TAGGED_PTR_REF(block_handler, 0x03);
+    struct rb_captured_block *captured = (struct rb_captured_block*)VM_TAGGED_PTR_REF(block_handler, 0x03);
     VM_ASSERT(VM_BH_ISEQ_BLOCK_P(block_handler));
     return captured;
 }
@@ -1236,7 +1286,7 @@ VM_BH_FROM_IFUNC_BLOCK(const struct rb_captured_block *captured)
 static inline const struct rb_captured_block *
 VM_BH_TO_IFUNC_BLOCK(VALUE block_handler)
 {
-    struct rb_captured_block *captured = VM_TAGGED_PTR_REF(block_handler, 0x03);
+    struct rb_captured_block *captured = (struct rb_captured_block*)VM_TAGGED_PTR_REF(block_handler, 0x03);
     VM_ASSERT(VM_BH_IFUNC_P(block_handler));
     return captured;
 }
@@ -1244,7 +1294,7 @@ VM_BH_TO_IFUNC_BLOCK(VALUE block_handler)
 static inline const struct rb_captured_block *
 VM_BH_TO_CAPT_BLOCK(VALUE block_handler)
 {
-    struct rb_captured_block *captured = VM_TAGGED_PTR_REF(block_handler, 0x03);
+    struct rb_captured_block *captured = (struct rb_captured_block*)VM_TAGGED_PTR_REF(block_handler, 0x03);
     VM_ASSERT(VM_BH_IFUNC_P(block_handler) || VM_BH_ISEQ_BLOCK_P(block_handler));
     return captured;
 }
@@ -1309,7 +1359,7 @@ vm_block_type_set(const struct rb_block *block, enum rb_block_type type)
 static inline const struct rb_block *
 vm_proc_block(VALUE procval)
 {
-    rb_proc_t *proc = RTYPEDDATA_DATA(procval);
+    rb_proc_t *proc = (rb_proc_t*)RTYPEDDATA_DATA(procval);
     VM_ASSERT(rb_obj_is_proc(procval));
     return &proc->block;
 }

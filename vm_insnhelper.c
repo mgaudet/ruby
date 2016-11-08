@@ -2833,3 +2833,140 @@ vm_defined(rb_thread_t *th, rb_control_frame_t *reg_cfp, rb_num_t op_type, VALUE
 	return Qnil;
     }
 }
+
+#ifdef JIT_INTERFACE 
+/**
+ * Compile an iseq. 
+ */
+void *
+vm_jit_compile(rb_vm_t *vm, const rb_iseq_t *iseq)
+{
+    assert(   vm->jit
+           && vm->jit->compile_f
+           && "vm_jit_compile should only be called when we have JIT enabled");
+
+    return (vm->jit->compile_f)(iseq);
+}
+
+/*
+ * JIT the given iseq. 
+ *
+ * Return true if successful, and false if not. 
+ */
+static VALUE
+vm_jit(rb_thread_t *th, rb_iseq_t * iseq)
+{
+    iseq_jit_body_info *body_info = NULL;;
+    if (!th->vm->jit) return Qfalse; /* Don't compile if we have no jit.  */
+    
+    body_info = (iseq_jit_body_info *)vm_jit_compile(th->vm, iseq);
+    if (body_info) {
+        /* OMR:TODO:GVL: we may need to do the following atomically */
+        
+        body_info->recomp_count = th->vm->jit->default_count;
+        body_info->invoke_count = 0;
+        body_info->prev = NULL;
+        body_info->next = iseq->jit.body_info;
+        if (iseq->jit.body_info) {
+            iseq->jit.body_info->prev = body_info;
+        }
+        iseq->jit.body_info = body_info;
+        iseq->jit.u.code  = body_info->startPC;
+        iseq->jit.state = ISEQ_JIT_STATE_JITTED;
+        return Qtrue; /* jitted now */
+    } else {
+        if (iseq->jit.state == ISEQ_JIT_STATE_JITTED) {
+            /* unable to recompile - never attempt again */
+            iseq->jit.state = ISEQ_JIT_STATE_RECOMP_BLACKLISTED;
+            return Qtrue;
+        }
+        else {
+            /* unable to compile - never attempt again */
+            iseq->jit.state = ISEQ_JIT_STATE_BLACKLISTED;
+            return Qfalse;
+        }
+    }
+}
+static VALUE
+vm_jitted_p(rb_thread_t *th, rb_iseq_t *iseq)
+{
+    if (!th->vm->jit) return Qfalse;
+ 
+    if (iseq->jit.state == ISEQ_JIT_STATE_BLACKLISTED)
+        return Qfalse;
+    
+    if (iseq->jit.state == ISEQ_JIT_STATE_RECOMP_BLACKLISTED)
+        return Qtrue;
+
+    if (iseq->jit.state == ISEQ_JIT_STATE_JITTED) {
+        if (th->vm->jit->options & TIERED_COMPILATION) {
+            --iseq->jit.body_info->recomp_count;
+            
+            if (iseq->jit.body_info->recomp_count < 0) {
+                return vm_jit(th,(rb_iseq_t*)iseq); //Cast away constness if we're compiling 
+            }
+        }
+        return Qtrue;
+    }
+    
+    if (iseq->jit.state == ISEQ_JIT_STATE_ZERO) {
+        /* uninitialized */
+        /* OMR:TODO:GVL: we may need to do the following atomically */
+        iseq->jit.u.count = th->vm->jit->default_count;
+        iseq->jit.state = ISEQ_JIT_STATE_INTERPRETED;
+        iseq->jit.body_info = NULL;
+    }
+
+    --iseq->jit.u.count;
+
+    if (iseq->jit.u.count < 0) {
+       return vm_jit(th,iseq); 
+    }
+    
+    return Qfalse; /* not jitted yet */
+}
+
+static VALUE
+vm_exec_jitted(rb_thread_t *th)
+{
+    VALUE val;
+    rb_control_frame_t *cfp = th->cfp;
+    jit_method_t code = (jit_method_t)(cfp->iseq->jit.u.code);
+
+    VM_ENV_FLAGS_SET(th->cfp->ep, VM_FRAME_FLAG_JITTED); 
+
+    val = (th->vm->jit->dispatch_f)(th, code);
+
+    return val;
+}
+
+static VALUE vm_exec(rb_thread_t *th);
+
+VALUE
+vm_send_without_block(rb_thread_t* th, CALL_INFO ci, CALL_CACHE cc, VALUE recv) 
+{
+   VALUE val;
+   int from_jit = VM_FRAME_JITTED_P(th->cfp);
+   struct rb_calling_info calling;
+   rb_control_frame_t *const reg_cfp = th->cfp;  /* Used for TOPN */ 
+
+   calling.block_handler = VM_BLOCK_HANDLER_NONE;
+   vm_search_method(ci, cc, calling.recv = TOPN(calling.argc = ci->orig_argc));
+   val  = (*(cc)->call)(th, GET_CFP(), &calling, ci, cc); 
+
+   if (val == Qundef) {
+	/* undef implies that send only did a frame setup.
+	   we need invovke vm_exec */
+
+        if (from_jit ||
+            vm_jitted_p(th, th->cfp->iseq) == Qtrue) {
+
+           VM_ENV_FLAGS_SET(th->cfp->ep, VM_FRAME_FLAG_FINISH); 
+           val = vm_exec(th);
+        }
+        
+    }
+   return val;
+}
+
+#endif /* JIT INTERFACE */

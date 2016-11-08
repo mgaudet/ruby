@@ -68,6 +68,12 @@ ENC_MK        = enc.mk
 MAKE_ENC      = -f $(ENC_MK) V="$(V)" UNICODE_HDR_DIR="$(UNICODE_HDR_DIR)" \
 		RUBY="$(MINIRUBY)" MINIRUBY="$(MINIRUBY)" $(MFLAGS)
 
+ifdef WITH_OMR_JIT
+   JITOBJS = omr_jit.$(OBJEXT)
+else
+   JITOBJS = no_jit.$(OBJEXT)
+endif
+
 COMMONOBJS    = array.$(OBJEXT) \
 		bignum.$(OBJEXT) \
 		class.$(OBJEXT) \
@@ -129,6 +135,7 @@ COMMONOBJS    = array.$(OBJEXT) \
 		vm_dump.$(OBJEXT) \
 		vm_trace.$(OBJEXT) \
 		$(DTRACE_OBJ) \
+		$(JITOBJS) \
 		$(BUILTIN_ENCOBJS) \
 		$(BUILTIN_TRANSOBJS) \
 		$(MISSING)

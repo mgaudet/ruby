@@ -1,0 +1,8 @@
+[submodule "rbjitglue"]
+	path = rbjitglue
+	url = https://github.com/mgaudet/rbjitglue.git
+	branch = 2.3-preliminary
+[submodule "omr"]
+	path = omr
+	url = git@github.com:mgaudet/omr.git
+	branch = testing-with-2.3
