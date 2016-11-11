@@ -2887,9 +2887,11 @@ vm_jit(rb_thread_t *th, rb_iseq_t * iseq)
         }
     }
 }
+
 static VALUE
-vm_jitted_p(rb_thread_t *th, rb_iseq_t *iseq)
+vm_jitted_p(rb_thread_t *th, const rb_iseq_t *iseq_const)
 {
+    rb_iseq_t * iseq = (rb_iseq_t*)iseq_const; /* Cast away constness: FIX THIS */
     if (!th->vm->jit) return Qfalse;
  
     if (iseq->jit.state == ISEQ_JIT_STATE_BLACKLISTED)
@@ -2968,5 +2970,93 @@ vm_send_without_block(rb_thread_t* th, CALL_INFO ci, CALL_CACHE cc, VALUE recv)
     }
    return val;
 }
+
+static VALUE
+vm_send(rb_thread_t *th, CALL_INFO ci, CALL_CACHE cc, ISEQ blockiseq, rb_control_frame_t *reg_cfp)
+{
+    VALUE val;
+    int from_jit = VM_FRAME_JITTED_P(reg_cfp);
+
+    struct rb_calling_info calling;
+
+    vm_caller_setup_arg_block(th, reg_cfp, &calling, ci, blockiseq, FALSE);
+    vm_search_method(ci, cc, calling.recv = TOPN(calling.argc = ci->orig_argc));
+    val = (*(cc)->call)(th, reg_cfp, &calling, ci, cc);
+
+    if (val == Qundef) {
+	/* undef implies that send only did a frame setup.
+	   we need invovke vm_exec */
+
+        if (from_jit ||
+            vm_jitted_p(th, th->cfp->iseq) == Qtrue) {
+
+            VM_ENV_FLAGS_SET(th->cfp->ep, VM_FRAME_FLAG_FINISH); 
+            val = vm_exec(th);
+        }
+    }
+
+    return val;
+}
+
+
+static VALUE
+vm_invokesuper(rb_thread_t *th, CALL_INFO ci, CALL_CACHE cc, ISEQ blockiseq, rb_control_frame_t *reg_cfp)
+{
+    VALUE val;
+    int from_jit = VM_FRAME_JITTED_P(reg_cfp);
+
+    struct rb_calling_info calling;
+    calling.argc = ci->orig_argc;
+
+    vm_caller_setup_arg_block(th, reg_cfp, &calling, ci, blockiseq, TRUE);
+    calling.recv = GET_SELF();
+    vm_search_super_method(th, GET_CFP(), &calling, ci, cc);
+
+    val = (*(cc)->call)(th, reg_cfp, &calling, ci, cc);
+    if (val == Qundef) {
+	/* undef implies that send only did a frame setup.
+	   we need invovke vm_exec */
+
+        if (from_jit ||
+            vm_jitted_p(th, th->cfp->iseq) == Qtrue) {
+            
+            VM_ENV_FLAGS_SET(th->cfp->ep, VM_FRAME_FLAG_FINISH); 
+            val = vm_exec(th);
+        }
+    }
+    
+    return val;
+}
+
+static VALUE
+vm_invoke_block_wrapper(rb_thread_t *th, CALL_INFO ci)
+{
+    VALUE val;
+    rb_control_frame_t *cfp = th->cfp;
+    int from_jit = VM_FRAME_JITTED_P(cfp);
+
+    struct rb_calling_info calling;
+    calling.argc = ci->orig_argc;
+    calling.block_handler = VM_BLOCK_HANDLER_NONE;
+    calling.recv = th->cfp->self;
+
+    val = vm_invoke_block(th, cfp, &calling, ci);
+
+    if (val == Qundef) {
+	/* undef implies that send only did a frame setup.
+	   we need invovke vm_exec */
+
+        if (from_jit ||
+            vm_jitted_p(th, th->cfp->iseq) == Qtrue) {
+            
+            VM_ENV_FLAGS_SET(th->cfp->ep, VM_FRAME_FLAG_FINISH); 
+            val = vm_exec(th);
+        }
+    }
+
+    return val;    
+}
+
+
 
 #endif /* JIT INTERFACE */
