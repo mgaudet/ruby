@@ -148,7 +148,7 @@ vm_jit_init(rb_vm_t *vm, jit_globals_t globals)
 #ifdef OMR_RUBY_VALID_CLASS
     jit->callbacks.ruby_omr_is_valid_object_f                   = rb_omr_is_valid_object;
 #endif
-
+    jit->callbacks.rb_vm_env_write_f        = rb_vm_env_write; 
 
     verify_jit_callbacks(&jit->callbacks); 
     

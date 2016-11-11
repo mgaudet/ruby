@@ -40,7 +40,7 @@ struct jit_callbacks_struct {
    VALUE                (*vm_send_f)                    (rb_thread_t *th, CALL_INFO ci, rb_control_frame_t *reg_cfp);
    VALUE                (*vm_send_without_block_f)      (rb_thread_t *th, CALL_INFO ci, VALUE recv);
    */
-   void                 (*lep_svar_set_f)               (rb_thread_t *th, VALUE *lep, rb_num_t key, VALUE val);
+   void                 (*lep_svar_set_f)               (rb_thread_t *th, const VALUE *lep, rb_num_t key, VALUE val);
    VALUE                (*vm_getivar_f)                 (VALUE obj, ID id, IC ic, struct rb_call_cache* cc, int is_attr);
    VALUE                (*vm_setivar_f)                 (VALUE obj, ID id, VALUE val, IC ic, struct rb_call_cache* cc, int is_attr);
    VALUE                (*rb_ary_new_capa_f)            (long n);
@@ -61,7 +61,7 @@ struct jit_callbacks_struct {
    void                 (*rb_iseq_add_mark_object_f)    (const rb_iseq_t *iseq, VALUE obj);
    VALUE                (*rb_obj_as_string_f)           (VALUE obj);
    VALUE                (*rb_str_append_f)              (VALUE str, VALUE str2);
-   VALUE*               (*rb_vm_ep_local_ep_f)          (VALUE *ep);
+   const VALUE*         (*rb_vm_ep_local_ep_f)          (const VALUE *ep);
    VALUE                (*vm_get_cbase_f)               (const VALUE *ep);
    rb_cref_t*           (*rb_vm_get_cref_f)             (const VALUE *ep);
    VALUE                (*vm_get_const_base_f)          (const VALUE *ep);
@@ -88,6 +88,7 @@ struct jit_callbacks_struct {
 #ifdef OMR_RUBY_VALID_CLASS
     int                 (*ruby_omr_is_valid_object_f)   (VALUE object);
 #endif
+    void                (*rb_vm_env_write_f)            (const VALUE*, int, VALUE); 
 };
 
 typedef struct jit_callbacks_struct jit_callbacks_t;
