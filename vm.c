@@ -1715,6 +1715,10 @@ vm_exec2(rb_thread_t *th, VALUE initial)
      *    return from vm_exec_2 looks like an early exit from vm_exec_core,
      *    causing a fallthrough to the `finish_vme` point.  
      *
+     *    Currently it's also required to make sure the interpreter is 
+     *    prepared to handle a value return (see definition of `leave` 
+     *    and vm_pop_frame), which JITted bodies do universally right now. 
+     *
      *    One option would be to reinvoke the interpreter loop, however,
      *    early experimentation with this was unsuccessful. 
      *
