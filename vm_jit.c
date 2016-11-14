@@ -29,7 +29,7 @@ extern char * get_jit_options();
 
 /* Forward declare.  */ 
 void verify_jit_callbacks(jit_callbacks_t *callbacks); 
-void vm_jit_stack_check(rb_control_frame_t * cfp); 
+void vm_jit_stack_check(rb_thread_t*, rb_control_frame_t * cfp); 
 
 void
 vm_jit_init(rb_vm_t *vm, jit_globals_t globals)
@@ -149,6 +149,7 @@ vm_jit_init(rb_vm_t *vm, jit_globals_t globals)
     jit->callbacks.ruby_omr_is_valid_object_f                   = rb_omr_is_valid_object;
 #endif
     jit->callbacks.rb_vm_env_write_f        = rb_vm_env_write; 
+    jit->callbacks.vm_jit_stack_check_f     = vm_jit_stack_check; 
 
     verify_jit_callbacks(&jit->callbacks); 
     
@@ -231,12 +232,13 @@ vm_jit_destroy(rb_vm_t *vm)
  * as YARV's `leave` opcode. 
  */
 void 
-vm_jit_stack_check(rb_control_frame_t * cfp)
+vm_jit_stack_check(rb_thread_t* th, rb_control_frame_t * cfp)
    {
+   const VALUE *const bp = vm_base_ptr(cfp);
    if (cfp->sp != vm_base_ptr(cfp)) 
       {
-      rb_bug("JIT Stack consistency error: (sp: %p, bp: %p)",
-             cfp->sp, vm_base_ptr(cfp)); 
+      rb_bug("JIT Stack consistency error (sp: %"PRIdPTRDIFF", bp: %"PRIdPTRDIFF")",
+             VM_SP_CNT(th, cfp->sp), VM_SP_CNT(th, bp));
       }
    }
 

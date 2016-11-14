@@ -89,6 +89,7 @@ struct jit_callbacks_struct {
     int                 (*ruby_omr_is_valid_object_f)   (VALUE object);
 #endif
     void                (*rb_vm_env_write_f)            (const VALUE*, int, VALUE); 
+    void                (*vm_jit_stack_check_f)         (rb_thread_t*, rb_control_frame_t* cfp); 
 };
 
 typedef struct jit_callbacks_struct jit_callbacks_t;
