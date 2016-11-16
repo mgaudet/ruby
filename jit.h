@@ -36,10 +36,8 @@ struct jit_callbacks_struct {
    /* JIT required callbacks. */ 
    const char *         (*rb_id2name_f)                 (ID id);
    VALUE                (*rb_funcallv_f)                (VALUE, ID, int, const VALUE *);
-   /*
-   VALUE                (*vm_send_f)                    (rb_thread_t *th, CALL_INFO ci, rb_control_frame_t *reg_cfp);
-   VALUE                (*vm_send_without_block_f)      (rb_thread_t *th, CALL_INFO ci, VALUE recv);
-   */
+   VALUE                (*vm_send_f)                    (rb_thread_t *th, CALL_INFO ci, CALL_CACHE cc, ISEQ blockiseq, rb_control_frame_t *reg_cfp);
+   VALUE                (*vm_send_without_block_f)      (rb_thread_t *th, CALL_INFO ci, CALL_CACHE cc, VALUE recv);
    void                 (*lep_svar_set_f)               (rb_thread_t *th, const VALUE *lep, rb_num_t key, VALUE val);
    VALUE                (*vm_getivar_f)                 (VALUE obj, ID id, IC ic, struct rb_call_cache* cc, int is_attr);
    VALUE                (*vm_setivar_f)                 (VALUE obj, ID id, VALUE val, IC ic, struct rb_call_cache* cc, int is_attr);
@@ -71,10 +69,8 @@ struct jit_callbacks_struct {
    VALUE                (*rb_ary_tmp_new_f)             (long capa);
    void                 (*rb_ary_store_f)               (VALUE ary, long idx, VALUE val);
    VALUE                (*rb_reg_new_ary_f)             (VALUE ary, int opt);
-   /*
-   VALUE                (*vm_invokesuper_f)             (rb_thread_t *th, CALL_INFO ci, rb_control_frame_t *cfp);
+   VALUE                (*vm_invokesuper_f)             (rb_thread_t *th, CALL_INFO ci, CALL_CACHE cc, ISEQ blockiseq, rb_control_frame_t *cfp);
    VALUE                (*vm_invokeblock_f)             (rb_thread_t *th, CALL_INFO ci);
-   */
    VALUE                (*rb_class_of_f)                (VALUE obj);
    rb_method_entry_t *  (*rb_method_entry_f)            (VALUE klass, ID id, VALUE *defined_class_ptr);
    void                 (*rb_bug_f)                     (const char *, ...);

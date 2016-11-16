@@ -2953,7 +2953,8 @@ vm_send_without_block(rb_thread_t* th, CALL_INFO ci, CALL_CACHE cc, VALUE recv)
    rb_control_frame_t *const reg_cfp = th->cfp;  /* Used for TOPN */ 
 
    calling.block_handler = VM_BLOCK_HANDLER_NONE;
-   vm_search_method(ci, cc, calling.recv = TOPN(calling.argc = ci->orig_argc));
+   calling.argc = ci->orig_argc;
+   vm_search_method(ci, cc, calling.recv = recv);
    val  = (*(cc)->call)(th, GET_CFP(), &calling, ci, cc); 
 
    if (val == Qundef) {
