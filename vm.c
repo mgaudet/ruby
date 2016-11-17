@@ -3431,10 +3431,8 @@ VALUE
 vm_jit_compiled_p(VALUE klass, VALUE method)
 {
 #if defined(JIT_INTERFACE)
-   rb_iseq_t * iseq; 
-
-   iseq = (rb_iseq_t*)iseqw_s_of(klass,method);  
-   if (iseq && iseq->jit.state == ISEQ_JIT_STATE_JITTED)
+   VALUE iseq = iseqw_s_of(klass,method);
+   if (!NIL_P(iseq) && rb_iseqw_to_iseq(iseq)->jit.state == ISEQ_JIT_STATE_JITTED)
       return Qtrue; 
 #endif
 
@@ -3454,13 +3452,14 @@ VALUE
 vm_jit_compile_method(VALUE klass, VALUE method)
 {
 #if defined(JIT_INTERFACE)
-   rb_iseq_t    *iseq; 
+   VALUE iseq; 
    rb_thread_t  *th;
 
-   iseq = (rb_iseq_t*)iseqw_s_of(klass,method);
-   if (iseq) {
+   iseq = iseqw_s_of(klass,method);
+
+   if (!NIL_P(iseq)) {
       th   = GET_THREAD();
-      return vm_jit(th, iseq);   
+      return vm_jit(th, rb_iseqw_to_iseq(iseq));   
    }
 #endif
    return Qfalse; 
