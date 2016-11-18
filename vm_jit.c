@@ -71,17 +71,21 @@ vm_jit_init(rb_vm_t *vm, jit_globals_t globals)
     jit->terminate_f = dlsym(handle, "jit_terminate");
     jit->compile_f   = dlsym(handle, "jit_compile");
     jit->dispatch_f  = dlsym(handle, "jit_dispatch");
+    jit->crash_f     = dlsym(handle, "jit_crash");
 
     if (!jit->init_f      ||
 	!jit->terminate_f ||
 	!jit->compile_f   ||
+	!jit->crash_f   ||
         !jit->dispatch_f   ) {
-	fprintf(stderr, "vm_jit_init: missing symbols in %s: init %p, terminate %p, compile %p, dispatch %p\n",
+	fprintf(stderr, "vm_jit_init: missing symbols in %s: init %p, terminate %p, compile %p, dispatch %p crash %p\n",
                 dll_name,
                 jit->init_f,
                 jit->terminate_f,
                 jit->compile_f,
-                jit->dispatch_f);
+                jit->dispatch_f,
+                jit->crash_f
+                );
 	goto symbol_problem;
     }
 

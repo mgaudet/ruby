@@ -150,6 +150,9 @@ struct rb_jit_struct {
    /** Compile a given instruction sequence */  
     void* (*compile_f)(const rb_iseq_t *iseq);
 
+   /** JIT crash Handler  */  
+    void (*crash_f)(void);
+
    /** Dispatch to compiled code. */
     VALUE (*dispatch_f)(rb_thread_t *th, jit_method_t code);
 

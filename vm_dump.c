@@ -13,6 +13,7 @@
 #include "addr2line.h"
 #include "vm_core.h"
 #include "iseq.h"
+#include "jit.h"
 
 /* see vm_insnhelper.h for the values */
 #ifndef VMDEBUG
@@ -1043,6 +1044,12 @@ rb_vm_bugreport(const void *ctx)
 	    }
 	}
 	fprintf(stderr, "\n");
+#ifdef JIT_INTERFACE
+        /* Run the JIT crash handler if we have one. */
+        if (vm->jit && vm->jit->crash_f) { 
+           vm->jit->crash_f(); 
+        }
+#endif
     }
 
     {
