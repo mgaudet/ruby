@@ -13,7 +13,7 @@ module Forwardable
   def self._compile_method(src, file, line)
     RubyVM::InstructionSequence.compile(src, file, file, line,
                trace_instruction: false,
-               tailcall_optimization: true)
+               tailcall_optimization: !RubyVM::JIT::exists?)
       .eval
   end
 end
