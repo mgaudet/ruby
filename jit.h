@@ -86,6 +86,11 @@ struct jit_callbacks_struct {
 #endif
     void                (*rb_vm_env_write_f)            (const VALUE*, int, VALUE); 
     void                (*vm_jit_stack_check_f)         (rb_thread_t*, rb_control_frame_t* cfp); 
+    VALUE               (*rb_str_freeze_f)              (VALUE);
+    VALUE               (*rb_ivar_set_f)                  (VALUE, ID, VALUE);
+
+
+
 };
 
 typedef struct jit_callbacks_struct jit_callbacks_t;
