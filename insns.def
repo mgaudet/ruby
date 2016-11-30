@@ -1272,7 +1272,7 @@ once
 DEFINE_INSN
 opt_case_dispatch
 (CDHASH hash, OFFSET else_offset)
-(..., VALUE key)
+(VALUE key)
 () // inc += -1;
 {
     switch(TYPE(key)) {
