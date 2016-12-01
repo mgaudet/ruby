@@ -152,6 +152,7 @@ vm_jit_init(rb_vm_t *vm, jit_globals_t globals)
     jit->callbacks.vm_jit_stack_check_f     = vm_jit_stack_check; 
     jit->callbacks.rb_str_freeze_f          = rb_str_freeze; 
     jit->callbacks.rb_ivar_set_f            = rb_ivar_set; 
+    jit->callbacks.vm_compute_case_dest_f   = vm_compute_case_dest; 
 
     verify_jit_callbacks(&jit->callbacks); 
     

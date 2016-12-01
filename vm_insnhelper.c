@@ -3061,6 +3061,47 @@ vm_invoke_block_wrapper(rb_thread_t *th, CALL_INFO ci)
     return val;    
 }
 
-
+/**
+ * Used by the JIT to compute opt_case_dispatch destination when
+ * fastpath optimizations aren't enabled. 
+ *
+ * Returns the offset to jump to, or 0 in the fallthrough case: 
+ *
+ * TODO: This can potentially be automatically generated from isns.def.
+ */
+static OFFSET
+vm_compute_case_dest(CDHASH hash, OFFSET else_offset, VALUE key) 
+   {
+   switch (OBJ_BUILTIN_TYPE(key)) {
+      case -1:
+      case T_FLOAT:
+      case T_SYMBOL:
+      case T_BIGNUM:
+      case T_STRING:
+         if (BASIC_OP_UNREDEFINED_P(BOP_EQQ,
+                                    SYMBOL_REDEFINED_OP_FLAG |
+                                    INTEGER_REDEFINED_OP_FLAG |
+                                    FLOAT_REDEFINED_OP_FLAG |
+                                    NIL_REDEFINED_OP_FLAG    |
+                                    TRUE_REDEFINED_OP_FLAG   |
+                                    FALSE_REDEFINED_OP_FLAG  |
+                                    STRING_REDEFINED_OP_FLAG)) {
+            st_data_t val;
+            if (RB_FLOAT_TYPE_P(key)) {
+               double kval = RFLOAT_VALUE(key);
+               if (!isinf(kval) && modf(kval, &kval) == 0.0) {
+                  key = FIXABLE(kval) ? LONG2FIX((long)kval) : rb_dbl2big(kval);
+               }
+            }
+            if (st_lookup(RHASH_TBL_RAW(hash), key, &val)) {
+               return FIX2INT((VALUE)val);
+            }
+            else {
+               return else_offset;
+            }
+         }
+   }
+   return 0;
+   }
 
 #endif /* JIT INTERFACE */
