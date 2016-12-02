@@ -1,7 +1,3 @@
-[submodule "rbjitglue"]
-	path = rbjitglue
-	url = https://github.com/rubyomr-preview/rbjitglue.git
-	branch = ruby_2_4_omr_preliminary 
 [submodule "omr"]
 	path = omr
 	url = https://github.com/eclipse/omr.git 
