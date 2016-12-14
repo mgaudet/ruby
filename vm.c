@@ -1726,7 +1726,7 @@ vm_exec2(rb_thread_t *th, VALUE initial)
      */
     if (VM_FRAME_TYPE(th->cfp) != VM_FRAME_MAGIC_RESCUE && 
         VM_FRAME_FINISHED_P(th->cfp) && 
-        vm_jitted_p(th, (rb_iseq_t*)th->cfp->iseq) == Qtrue) {  //Cast away constness for compiler  -- FIXME: May require redesign. 
+        vm_jitted_p(th->vm->jit, (rb_iseq_t*)th->cfp->iseq) == Qtrue) {  //Cast away constness for compiler  -- FIXME: May require redesign. 
 	result = vm_exec_jitted(th);
     }
     else
@@ -3393,81 +3393,6 @@ vm_collect_usage_register(int reg, int isset)
 #include "vm_call_iseq_optimized.inc" /* required from vm_insnhelper.c */
 
 extern VALUE rb_cMethod; 
-
-
-/*
- * call-seq:
- *      RubyVM::JIT::exists? -> boolean
- *
- * Returns true if a JIT is loaded and actitve
- */
-VALUE
-vm_jit_exists_p()
-{
-#if defined(JIT_INTERFACE)
-   rb_thread_t  *th;
-   th   = GET_THREAD();
-
-   if (th->vm->jit) return Qtrue;
-#endif
-   return Qfalse;
-}
-
-VALUE iseqw_s_of(VALUE klass, VALUE body);
-
-/*
- * call-seq:
- *    RubyVM::JIT::compiled?(method)   -> boolean 
- *
- * Returns true if the code associated with this method has been jitted. 
- */
-VALUE
-vm_jit_compiled_p(VALUE klass, VALUE method)
-{
-#if defined(JIT_INTERFACE)
-   VALUE iseq = iseqw_s_of(klass,method);
-   if (!NIL_P(iseq) && rb_iseqw_to_iseq(iseq)->jit.state == ISEQ_JIT_STATE_JITTED)
-      return Qtrue; 
-#endif
-
-   return Qfalse; 
-
-
-}
-
-/*
- * call-seq:
- *    RubyVM::JIT::compile   -> boolean 
- *
- * Attempts to compile the method, and returns true if successful. 
- *
- */
-VALUE
-vm_jit_compile_method(VALUE klass, VALUE method)
-{
-#if defined(JIT_INTERFACE)
-   VALUE iseq; 
-   rb_thread_t  *th;
-
-   iseq = iseqw_s_of(klass,method);
-
-   if (!NIL_P(iseq)) {
-      th   = GET_THREAD();
-      return vm_jit(th, rb_iseqw_to_iseq(iseq));   
-   }
-#endif
-   return Qfalse; 
-}
-
-VALUE rb_cJIT; 
-
-void Init_JIT(void)
-{ 
-   rb_cJIT = rb_define_class_under(rb_cRubyVM, "JIT", rb_cObject);    
-   rb_define_singleton_method(rb_cJIT, "exists?",   vm_jit_exists_p, 0); 
-   rb_define_singleton_method(rb_cJIT, "compiled?", vm_jit_compiled_p, 1); 
-   rb_define_singleton_method(rb_cJIT, "compile",   vm_jit_compile_method, 1); 
-}
 
 #ifdef JIT_INTERFACE 
 #include "vm_jit.inc"

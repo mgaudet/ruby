@@ -2835,17 +2835,20 @@ vm_defined(rb_thread_t *th, rb_control_frame_t *reg_cfp, rb_num_t op_type, VALUE
 }
 
 #ifdef JIT_INTERFACE 
+
+
+
 /**
  * Compile an iseq. 
  */
 void *
-vm_jit_compile(rb_vm_t *vm, const rb_iseq_t *iseq)
+vm_jit_compile(rb_jit_t* jit, const rb_iseq_t *iseq)
 {
-    assert(   vm->jit
-           && vm->jit->compile_f
+    assert(   jit
+           && jit->compile_f
            && "vm_jit_compile should only be called when we have JIT enabled");
 
-    return (vm->jit->compile_f)(iseq);
+    return (jit->compile_f)(iseq);
 }
 
 /*
@@ -2854,16 +2857,16 @@ vm_jit_compile(rb_vm_t *vm, const rb_iseq_t *iseq)
  * Return true if successful, and false if not. 
  */
 static VALUE
-vm_jit(rb_thread_t *th, rb_iseq_t * iseq)
+vm_jit(rb_jit_t* jit, rb_iseq_t * iseq)
 {
     iseq_jit_body_info *body_info = NULL;;
-    if (!th->vm->jit) return Qfalse; /* Don't compile if we have no jit.  */
+    if (!jit) return Qfalse; /* Don't compile if we have no jit.  */
     
-    body_info = (iseq_jit_body_info *)vm_jit_compile(th->vm, iseq);
+    body_info = (iseq_jit_body_info *)vm_jit_compile(jit, iseq);
     if (body_info) {
         /* OMR:TODO:GVL: we may need to do the following atomically */
         
-        body_info->recomp_count = th->vm->jit->default_count;
+        body_info->recomp_count = jit->default_count;
         body_info->invoke_count = 0;
         body_info->prev = NULL;
         body_info->next = iseq->jit.body_info;
@@ -2889,10 +2892,10 @@ vm_jit(rb_thread_t *th, rb_iseq_t * iseq)
 }
 
 static VALUE
-vm_jitted_p(rb_thread_t *th, const rb_iseq_t *iseq_const)
+vm_jitted_p(rb_jit_t* jit, const rb_iseq_t *iseq_const)
 {
     rb_iseq_t * iseq = (rb_iseq_t*)iseq_const; /* Cast away constness: FIX THIS */
-    if (!th->vm->jit) return Qfalse;
+    if (!jit) return Qfalse;
  
     if (iseq->jit.state == ISEQ_JIT_STATE_BLACKLISTED)
         return Qfalse;
@@ -2901,11 +2904,11 @@ vm_jitted_p(rb_thread_t *th, const rb_iseq_t *iseq_const)
         return Qtrue;
 
     if (iseq->jit.state == ISEQ_JIT_STATE_JITTED) {
-        if (th->vm->jit->options & TIERED_COMPILATION) {
+        if (jit->options & TIERED_COMPILATION) {
             --iseq->jit.body_info->recomp_count;
             
             if (iseq->jit.body_info->recomp_count < 0) {
-                return vm_jit(th,(rb_iseq_t*)iseq); //Cast away constness if we're compiling 
+                return vm_jit(jit,(rb_iseq_t*)iseq); //Cast away constness if we're compiling 
             }
         }
         return Qtrue;
@@ -2913,8 +2916,10 @@ vm_jitted_p(rb_thread_t *th, const rb_iseq_t *iseq_const)
     
     if (iseq->jit.state == ISEQ_JIT_STATE_ZERO) {
         /* uninitialized */
-        /* OMR:TODO:GVL: we may need to do the following atomically */
-        iseq->jit.u.count = th->vm->jit->default_count;
+        /* OMR:TODO: In a world without the GVL, or where 
+         * we are compiling in compilation threads, 
+         * may need to do the following under some kind of mutex */
+        iseq->jit.u.count = jit->default_count;
         iseq->jit.state = ISEQ_JIT_STATE_INTERPRETED;
         iseq->jit.body_info = NULL;
     }
@@ -2922,7 +2927,7 @@ vm_jitted_p(rb_thread_t *th, const rb_iseq_t *iseq_const)
     --iseq->jit.u.count;
 
     if (iseq->jit.u.count < 0) {
-       return vm_jit(th,iseq); 
+       return vm_jit(jit, iseq); 
     }
     
     return Qfalse; /* not jitted yet */
@@ -2944,6 +2949,12 @@ vm_exec_jitted(rb_thread_t *th)
 
 static VALUE vm_exec(rb_thread_t *th);
 
+rb_jit_t*
+get_jit() 
+{
+   return GET_THREAD()->vm->jit; 
+}
+
 VALUE
 vm_send_without_block(rb_thread_t* th, CALL_INFO ci, CALL_CACHE cc, VALUE recv) 
 {
@@ -2962,7 +2973,7 @@ vm_send_without_block(rb_thread_t* th, CALL_INFO ci, CALL_CACHE cc, VALUE recv)
 	   we need invovke vm_exec */
 
         if (from_jit ||
-            vm_jitted_p(th, th->cfp->iseq) == Qtrue) {
+            vm_jitted_p(th->vm->jit, th->cfp->iseq) == Qtrue) {
 
            VM_ENV_FLAGS_SET(th->cfp->ep, VM_FRAME_FLAG_FINISH); 
            val = vm_exec(th);
@@ -2989,7 +3000,7 @@ vm_send(rb_thread_t *th, CALL_INFO ci, CALL_CACHE cc, ISEQ blockiseq, rb_control
 	   we need invovke vm_exec */
 
         if (from_jit ||
-            vm_jitted_p(th, th->cfp->iseq) == Qtrue) {
+            vm_jitted_p(th->vm->jit, th->cfp->iseq) == Qtrue) {
 
             VM_ENV_FLAGS_SET(th->cfp->ep, VM_FRAME_FLAG_FINISH); 
             val = vm_exec(th);
@@ -3019,7 +3030,7 @@ vm_invokesuper(rb_thread_t *th, CALL_INFO ci, CALL_CACHE cc, ISEQ blockiseq, rb_
 	   we need invovke vm_exec */
 
         if (from_jit ||
-            vm_jitted_p(th, th->cfp->iseq) == Qtrue) {
+            vm_jitted_p(th->vm->jit, th->cfp->iseq) == Qtrue) {
             
             VM_ENV_FLAGS_SET(th->cfp->ep, VM_FRAME_FLAG_FINISH); 
             val = vm_exec(th);
@@ -3048,7 +3059,7 @@ vm_invoke_block_wrapper(rb_thread_t *th, CALL_INFO ci)
 	   we need invovke vm_exec */
 
         if (from_jit ||
-            vm_jitted_p(th, th->cfp->iseq) == Qtrue) {
+            vm_jitted_p(th->vm->jit, th->cfp->iseq) == Qtrue) {
             
             VM_ENV_FLAGS_SET(th->cfp->ep, VM_FRAME_FLAG_FINISH); 
             val = vm_exec(th);

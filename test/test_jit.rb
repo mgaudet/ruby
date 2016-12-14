@@ -1,4 +1,5 @@
 require 'test/unit'
+require 'jit'
 
 
 class JITModuleTest < Test::Unit::TestCase 

@@ -589,7 +589,7 @@ typedef struct rb_vm_struct {
 
     short redefined_flag[BOP_LAST_];
 #if defined(JIT_OMR)
-    struct rb_jit_struct *jit;
+    rb_jit_t  *jit;
 #endif
 } rb_vm_t;
 

@@ -169,6 +169,8 @@ struct rb_jit_struct {
 };
 typedef struct rb_jit_struct rb_jit_t;
 
+rb_jit_t* get_jit(); 
+
 /**
  * Initialize the JIT for a VM
  */
@@ -182,6 +184,6 @@ void  vm_jit_destroy(rb_vm_t *vm);
 /**
  * Compile an instruction sequence
  */
-void *vm_jit_compile(rb_vm_t *vm, const rb_iseq_t *iseq);
+void *vm_jit_compile(rb_jit_t *jit, const rb_iseq_t *iseq);
 
 #endif

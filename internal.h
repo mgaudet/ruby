@@ -16,6 +16,9 @@
 #include "ruby/encoding.h"
 #include "ruby/io.h"
 
+struct rb_jit_struct; 
+typedef struct rb_jit_struct rb_jit_t;
+
 #if defined(__cplusplus)
 extern "C" {
 #if 0
@@ -1712,6 +1715,11 @@ VALUE rb_imemo_new_debug(enum imemo_type type, VALUE v1, VALUE v2, VALUE v3, VAL
 #else
 VALUE rb_imemo_new(enum imemo_type type, VALUE v1, VALUE v2, VALUE v3, VALUE v0);
 #endif
+
+/*
+ * JIT
+ */
+rb_jit_t* get_jit(); 
 
 RUBY_SYMBOL_EXPORT_END
 
