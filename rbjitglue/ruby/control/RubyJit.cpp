@@ -130,10 +130,8 @@ initializeAllHelpers(struct rb_vm_struct *vm, TR_RubyJitConfig *jitConfig)
    initHelper(vm_invokeblock);
    initHelper(rb_method_entry);
    initHelper(rb_class_of);
-   /*
    initHelper(vm_send_woblock_jit_inline_frame);
    initHelper(vm_send_woblock_inlineable_guard);
-   */
    initHelper(rb_bug);
    initHelper(vm_exec_core);
 #ifdef OMR_JIT_PROFILING

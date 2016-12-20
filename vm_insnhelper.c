@@ -1413,7 +1413,7 @@ static rb_method_definition_t *method_definition_create(rb_method_type_t type, I
 static void method_definition_set(const rb_method_entry_t *me, rb_method_definition_t *def, void *opts);
 static int rb_method_definition_eq(const rb_method_definition_t *d1, const rb_method_definition_t *d2);
 
-static const rb_iseq_t *
+const rb_iseq_t *
 def_iseq_ptr(rb_method_definition_t *def)
 {
 #if VM_CHECK_MODE > 0
@@ -3103,5 +3103,50 @@ vm_compute_case_dest(CDHASH hash, OFFSET else_offset, VALUE key)
    }
    return 0;
    }
+
+static void
+vm_send_woblock_jit_inline_frame(rb_thread_t *th, CALL_INFO ci, CALL_CACHE cc, VALUE recv)
+{                                                                                     
+   VALUE klass,*argv,*sp = NULL;
+   const rb_iseq_t *iseq = NULL;
+   rb_control_frame_t *cfp = th->cfp;
+   rb_control_frame_t *next_cfp = NULL;
+   int i, local_size;                                 
+
+   VM_ASSERT(cc->me); /* Should exist because we inlined a function, *and* passsed the guard!  */ 
+
+   /*vm_callee_setup_arg: This is currently a limitation of the inliner. */
+   VM_ASSERT(simple_iseq_p(iseq));
+   iseq = def_iseq_ptr(cc->me->def);                                                
+
+   /* vm_call_iseq_setup_normal(rb_thread_t *th, rb_control_frame_t *cfp, rb_call_info_t *ci) */
+   argv = cfp->sp - (ci->orig_argc + 1);                                                        
+   sp = argv + iseq->body->param.size;                                                       
+   cfp->sp = argv - 1 /* recv */;
+
+
+   next_cfp = vm_push_frame(th,                                                 /* thread       */
+                            iseq,                                               /* iseq         */ 
+                            VM_FRAME_MAGIC_METHOD | VM_FRAME_FLAG_JITTED,       /* type         */
+                            recv,                                               /* self         */ 
+                            VM_BLOCK_HANDLER_NONE,                              /* specval      */
+                            (VALUE)cc->me,                                      /* cref_or_me   */ 
+                            iseq->body->iseq_encoded /* + 0 (opt pc) */,        /* PC           */  
+                            sp,                                                 /* sp           */  
+                            (ci->orig_argc +1) - iseq->body->param.size,        /* local_size   */
+                            iseq->body->stack_max);                             /* stack_max    */ 
+
+
+   /* Latch the currently created frame. */
+   th->cfp = next_cfp;                     
+}
+
+static
+VALUE vm_send_woblock_inlineable_guard(CALL_CACHE cc, VALUE recv)
+{
+    VALUE klass = CLASS_OF(recv);
+    return (GET_GLOBAL_METHOD_STATE() == cc->method_state && RCLASS_SERIAL(klass) == cc->class_serial) && !getenv("FAIL_GUARD");
+}
+
 
 #endif /* JIT INTERFACE */

@@ -14,6 +14,7 @@
 
 /* Forward declare functions */
 VALUE rb_reg_new_ary(VALUE ary, int options);
+const rb_iseq_t * def_iseq_ptr(rb_method_definition_t *def);
 
 #define JIT_DEFAULT_COUNT 1000
 
@@ -140,10 +141,8 @@ vm_jit_init(rb_vm_t *vm, jit_globals_t globals)
     jit->callbacks.rb_bug_f                 = rb_bug;
     jit->callbacks.vm_exec_core_f           = vm_exec_core;
     jit->callbacks.rb_class2name_f          = rb_class2name;
-    /*
     jit->callbacks.vm_send_woblock_jit_inline_frame_f = vm_send_woblock_jit_inline_frame;
     jit->callbacks.vm_send_woblock_inlineable_guard_f = vm_send_woblock_inlineable_guard;
-    */
     jit->callbacks.rb_threadptr_execute_interrupts_f  = rb_threadptr_execute_interrupts;
 #ifdef OMR_RUBY_VALID_CLASS
     jit->callbacks.ruby_omr_is_valid_object_f                   = rb_omr_is_valid_object;
@@ -153,6 +152,7 @@ vm_jit_init(rb_vm_t *vm, jit_globals_t globals)
     jit->callbacks.rb_str_freeze_f          = rb_str_freeze; 
     jit->callbacks.rb_ivar_set_f            = rb_ivar_set; 
     jit->callbacks.vm_compute_case_dest_f   = vm_compute_case_dest; 
+    jit->callbacks.def_iseq_ptr_f           = def_iseq_ptr; 
 
     verify_jit_callbacks(&jit->callbacks); 
     
@@ -238,7 +238,7 @@ void
 vm_jit_stack_check(rb_thread_t* th, rb_control_frame_t * cfp)
    {
    const VALUE *const bp = vm_base_ptr(cfp);
-   if (cfp->sp != vm_base_ptr(cfp)) 
+   if (cfp->sp != vm_base_ptr(cfp) && !getenv("SKIP_STACK") )
       {
       rb_bug("JIT Stack consistency error (sp: %"PRIdPTRDIFF", bp: %"PRIdPTRDIFF")",
              VM_SP_CNT(th, cfp->sp), VM_SP_CNT(th, bp));
