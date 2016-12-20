@@ -1772,28 +1772,36 @@ TR::Node *
 RubyIlGenerator::putspecialobject(rb_num_t value_type)
    {
    enum vm_special_object_type type = (enum vm_special_object_type) value_type;
+   traceMsg(comp(), "Generating putspecialobject type %d\n", type);
 
+   VALUE frozen_core = *(fe()->getJitInterface()->globals.ruby_rb_mRubyVMFrozenCore_ptr);
    TR_RuntimeHelper helper;
    //Check if we can support this value_type.
    switch(type)
       {
       case VM_SPECIAL_OBJECT_CBASE:
          helper = RubyHelper_vm_get_cbase;
+         traceMsg(comp(), "--Generating call to vm_get_cbase\n");
          break; 
       case VM_SPECIAL_OBJECT_CONST_BASE:
          helper = RubyHelper_vm_get_const_base;
+         traceMsg(comp(), "--Generating call to vm_get_const_base\n");
          break; 
       case VM_SPECIAL_OBJECT_VMCORE:
          // We can use RubyVMFrozenCore a compile time constant because:
          // 1. the object outlives all compiled methods
          // 2. objects are never moved by gc -- as long as that's true, 
          //    the following is safe.
-         return TR::Node::aconst(*(uintptrj_t*)fe()->getJitInterface()->globals.ruby_rb_mRubyVMFrozenCore_ptr);
+         traceMsg(comp(), "--Generating const load of frozencore %p (address in globals is %p)\n",
+                  frozen_core,
+                  fe()->getJitInterface()->globals.ruby_rb_mRubyVMFrozenCore_ptr);
+         return TR::Node::aconst(frozen_core);
       default:
          logAbort("we do not support putspecialobject with this case","putspecialobject_value");
          // unreachable. 
          break;
       }
+
 
       return genCall(helper, TR::Node::xcallOp(), 1, loadEP());
    }
@@ -2252,11 +2260,19 @@ RubyIlGenerator::genLeave(TR::Node *retval)
 
    rematerializeSP();
 
-   // This is a leave, so we should verify vm_jit_stack_check
-   //
-   genCall(RubyHelper_vm_jit_stack_check, TR::call, 2, 
+   if (comp()->isOutermostMethod()) 
+      {
+      traceMsg(comp(), "Generating jit stack check as outermost method"); 
+      // This is a leave, and not an inline body, so we should verify vm_jit_stack_check
+      //
+      genCall(RubyHelper_vm_jit_stack_check, TR::call, 2, 
               loadThread(),
               loadCFP());
+      }
+   else
+      {
+      traceMsg(comp(), "NOT Generating jit stack check as NOT outermost method"); 
+      }
 
    genAsyncCheck();
 

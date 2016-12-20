@@ -30,7 +30,7 @@ class InlinerUtil: public OMR_InlinerUtil
    public:
       InlinerUtil(TR::Compilation *comp);
    protected:
-      virtual void calleeTreeTopPreMergeActions(TR::ResolvedMethodSymbol *calleeResolvedMethodSymbol, TR_CallSite* callSite);
+      virtual void calleeTreeTopPreMergeActions(TR::ResolvedMethodSymbol *calleeResolvedMethodSymbol, TR_CallTarget* callTarget);
    };
 
 }

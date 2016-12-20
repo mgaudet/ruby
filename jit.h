@@ -76,10 +76,8 @@ struct jit_callbacks_struct {
    void                 (*rb_bug_f)                     (const char *, ...);
    VALUE                (*vm_exec_core_f)               (rb_thread_t *th, VALUE initial);
    const char *         (*rb_class2name_f)              (VALUE klass); 
-   /*
-   void                 (*vm_send_woblock_jit_inline_frame_f)(rb_thread_t *th, CALL_INFO ci, VALUE recv);
-   VALUE                (*vm_send_woblock_inlineable_guard_f)(CALL_INFO ci, VALUE klass);
-   */
+   void                 (*vm_send_woblock_jit_inline_frame_f)(rb_thread_t *th, CALL_INFO ci, CALL_CACHE cc, const rb_iseq_t* iseq, VALUE recv);
+   VALUE                (*vm_send_woblock_inlineable_guard_f)(rb_serial_t method_state, rb_serial_t class_serial, VALUE klass);
    void                 (*rb_threadptr_execute_interrupts_f) (rb_thread_t *th, int blocking_timing);
 #ifdef OMR_RUBY_VALID_CLASS
     int                 (*ruby_omr_is_valid_object_f)   (VALUE object);
@@ -89,7 +87,7 @@ struct jit_callbacks_struct {
     VALUE               (*rb_str_freeze_f)              (VALUE);
     VALUE               (*rb_ivar_set_f)                (VALUE, ID, VALUE);
     OFFSET              (*vm_compute_case_dest_f)       (CDHASH,OFFSET,VALUE);  
-
+    const rb_iseq_t *   (*def_iseq_ptr_f)               (rb_method_definition_t *def);
 
 };
 
