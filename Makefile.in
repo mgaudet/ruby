@@ -230,9 +230,6 @@ LIBS+=-ldl
 RBJITGLUE_DIR?=@RBJITGLUE_DIR@
 RELATIVE_OMR_DIR?=@RELATIVE_OMR_DIR@
 OMRDIR?=$(CURDIR)/$(RELATIVE_OMR_DIR)
-export RBJITGLUE_DIR 
-export RELATIVE_OMR_DIR 
-export OMRDIR
 
 JIT_SO_NAME=librbjit.so
 JIT_SO_DIR="$(CURDIR)"
@@ -248,20 +245,19 @@ endif # WITH_OMR_JIT
 
 .SUFFIXES: .inc .h .c .y .i .$(DTRACE_EXT)
 
-all:
+all: $(JIT_SO_NAME)
 
 # Prevent GNU make v3 from overflowing arg limit on SysV.
 .NOEXPORT:
 
 ifneq ($(WITH_OMR_JIT),)
-postbuild: $(JIT_SO_NAME)  
 install: jit-install
 uninstall: jit-uninstall
 clean: jit-clean
 
 omr-configure.stamp: 
-	touch omr-configure.stamp
 	$(MAKE) omr-configure
+	touch omr-configure.stamp
 
 omr-configure:
 	$(CHDIR) $(RELATIVE_OMR_DIR) && pwd && ./configure OMRDIR=$(OMRDIR) SPEC="$(SPEC)" OMRGLUE="$(RBJITGLUE_DIR)" OMRGLUE_INCLUDES="$(RUBY_IPATH)" OMRGLUE_CXXFLAGS="-Wno-error" OMRGLUE_CFLAGS="-Wno-error" $(all_omr_configure_args) && $(CHDIR) $(abs_srcdir)
