@@ -3107,11 +3107,9 @@ vm_compute_case_dest(CDHASH hash, OFFSET else_offset, VALUE key)
 static void
 vm_send_woblock_jit_inline_frame(rb_thread_t *th, CALL_INFO ci, CALL_CACHE cc, VALUE recv)
 {                                                                                     
-   VALUE klass,*argv,*sp = NULL;
+   VALUE *argv,*sp = NULL;
    const rb_iseq_t *iseq = NULL;
    rb_control_frame_t *cfp = th->cfp;
-   rb_control_frame_t *next_cfp = NULL;
-   int i, local_size;                                 
 
    VM_ASSERT(cc->me); /* Should exist because we inlined a function, *and* passsed the guard!  */ 
 
@@ -3120,25 +3118,20 @@ vm_send_woblock_jit_inline_frame(rb_thread_t *th, CALL_INFO ci, CALL_CACHE cc, V
    iseq = def_iseq_ptr(cc->me->def);                                                
 
    /* vm_call_iseq_setup_normal(rb_thread_t *th, rb_control_frame_t *cfp, rb_call_info_t *ci) */
-   argv = cfp->sp - (ci->orig_argc + 1);                                                        
+   argv = cfp->sp - ci->orig_argc; 
    sp = argv + iseq->body->param.size;                                                       
-   cfp->sp = argv - 1 /* recv */;
+   cfp->sp = argv - 1; 
 
-
-   next_cfp = vm_push_frame(th,                                                 /* thread       */
-                            iseq,                                               /* iseq         */ 
-                            VM_FRAME_MAGIC_METHOD | VM_FRAME_FLAG_JITTED,       /* type         */
-                            recv,                                               /* self         */ 
-                            VM_BLOCK_HANDLER_NONE,                              /* specval      */
-                            (VALUE)cc->me,                                      /* cref_or_me   */ 
-                            iseq->body->iseq_encoded /* + 0 (opt pc) */,        /* PC           */  
-                            sp,                                                 /* sp           */  
-                            (ci->orig_argc +1) - iseq->body->param.size,        /* local_size   */
-                            iseq->body->stack_max);                             /* stack_max    */ 
-
-
-   /* Latch the currently created frame. */
-   th->cfp = next_cfp;                     
+   vm_push_frame(th,                                                    /* thread       */
+                 iseq,                                                  /* iseq         */ 
+                 VM_FRAME_MAGIC_METHOD | VM_FRAME_FLAG_JITTED,          /* type         */
+                 recv,                                                  /* self         */ 
+                 VM_BLOCK_HANDLER_NONE,                                 /* specval      */
+                 (VALUE)cc->me,                                         /* cref_or_me   */ 
+                 iseq->body->iseq_encoded /* + 0 (opt pc) */,           /* PC           */  
+                 sp,                                                    /* sp           */  
+                 iseq->body->local_table_size - iseq->body->param.size, /* local_size   */
+                 iseq->body->stack_max);                                /* stack_max    */ 
 }
 
 static
