@@ -2252,11 +2252,19 @@ RubyIlGenerator::genLeave(TR::Node *retval)
 
    rematerializeSP();
 
-   // This is a leave, so we should verify vm_jit_stack_check
-   //
-   genCall(RubyHelper_vm_jit_stack_check, TR::call, 2, 
+   if (comp()->isOutermostMethod()) 
+      {
+      traceMsg(comp(), "Generating jit stack check as outermost method"); 
+      // This is a leave, and not an inline body, so we should verify vm_jit_stack_check
+      //
+      genCall(RubyHelper_vm_jit_stack_check, TR::call, 2, 
               loadThread(),
               loadCFP());
+      }
+   else
+      {
+      traceMsg(comp(), "NOT Generating jit stack check as NOT outermost method"); 
+      }
 
    genAsyncCheck();
 

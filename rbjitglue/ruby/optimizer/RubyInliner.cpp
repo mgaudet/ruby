@@ -73,12 +73,24 @@ bool TR_InlinerBase::inlineCallTarget(TR_CallStack *callStack, TR_CallTarget *ca
    {
    TR_InlinerDelimiter delimiter(tracer(),"TR_InlinerBase::inlineCallTarget");
 
+   if (!comp()->incInlineDepth(calltarget->_calleeSymbol,
+                               calltarget->_myCallSite->_callNode->getByteCodeInfo(),
+                               calltarget->_myCallSite->_callNode->getSymbolReference()->getCPIndex(),
+                               calltarget->_myCallSite->_callNode->getSymbolReference(),
+                               !calltarget->_myCallSite->_isIndirectCall,
+                               argInfo))
+      {
+      return false;
+      }
+
+
+
    bool successful = inlineCallTarget2(callStack, calltarget, cursorTreeTop, inlinefromgraph, 99);
-#if 0
+
    // if inlining fails, we need to tell decInlineDepth to remove elements that
    // we added during inlineCallTarget2
    comp()->decInlineDepth(!successful);
-#endif
+
    return successful;
    }
 
