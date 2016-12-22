@@ -53,13 +53,14 @@ before_script:
 
 script:
   - "make test TESTOPTS=--color=never"
+  - "OMR_JIT_OPTIONS='-Xjit:count=0' make test TESTOPTS=--color=never"
 #  - "make test-all TESTOPTS='-q -j3 --color=never --job-status=normal'"
 #  - "make test-rubyspec MSPECOPT=-fm"
 
-# Branch matrix.  Not all branches are Travis-ready so we limit branches here.
-branches:
-  only:
-    - ruby_2_4_omr_preliminary
+    # # Branch matrix.  Not all branches are Travis-ready so we limit branches here.
+    # branches:
+    #   only:
+    #     - ruby_2_4_omr_preliminary
 
 # Local Variables:
 # mode: YAML
