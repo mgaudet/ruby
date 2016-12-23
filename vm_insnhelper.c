@@ -3126,12 +3126,19 @@ vm_send_woblock_jit_inline_frame(rb_thread_t *th, CALL_INFO ci, CALL_CACHE cc, V
                  iseq,                                                  /* iseq         */ 
                  VM_FRAME_MAGIC_METHOD | VM_FRAME_FLAG_JITTED,          /* type         */
                  recv,                                                  /* self         */ 
-                 VM_BLOCK_HANDLER_NONE,                                 /* specval      */
+                 th->cfp->ep,                                           /* specval      */
                  (VALUE)cc->me,                                         /* cref_or_me   */ 
                  iseq->body->iseq_encoded /* + 0 (opt pc) */,           /* PC           */  
                  sp,                                                    /* sp           */  
                  iseq->body->local_table_size - iseq->body->param.size, /* local_size   */
                  iseq->body->stack_max);                                /* stack_max    */ 
+
+   if (getenv("TRACE_INLINE_FRAME")) { 
+      fprintf(stderr, "New inline frame: cfp: %p sp: %p ep: %p\n", 
+              th->cfp,
+              th->cfp->sp,
+              th->cfp->ep);
+   }
 }
 
 static
