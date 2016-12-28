@@ -190,6 +190,7 @@ RubyIlGenerator::genIL()
       comp()->reportILGeneratorPhase();
 
    TR::StackMemoryRegion stackMemoryRegion(*trMemory());
+   _stackMemoryRegion = &stackMemoryRegion; 
 
    comp()->setCurrentIlGenerator(this);
 
@@ -201,6 +202,7 @@ RubyIlGenerator::genIL()
       prependSPPrivatization();
 
    comp()->setCurrentIlGenerator(0);
+   _stackMemoryRegion = NULL; 
 
    return success;
    }
@@ -798,7 +800,6 @@ RubyIlGenerator::indexedWalker(int32_t startIndex, int32_t& firstIndex, int32_t&
       traceMsg(comp(), "RubyIlGenerator:: Generating bytecode %d %s into block %p. Stack height is %d\n", _bcIndex, byteCodeName(insn), _block, _stack->size());
 
       TR::DebugCounter::incStaticDebugCounter(comp(), TR::DebugCounter::debugCounterName(comp(), "bytecode_seen/%s", byteCodeName(insn)));
-
       switch (insn)
          {
          case BIN(nop):                         /*nothing */ _bcIndex += len; break;
@@ -2044,8 +2045,8 @@ int32_t
 RubyIlGenerator::genOptCaseDispatch(CDHASH hash, OFFSET else_offset)  
       {
       // #define JUMP(dst)          (VM_REG_PC += (dst))
-      TR::StackMemoryRegion stackMemoryRegion(*trMemory());
-      auto targets = hash_to_map(stackMemoryRegion, hash); 
+      // TR::StackMemoryRegion stackMemoryRegion(*trMemory());
+      auto targets = hash_to_map(*_stackMemoryRegion, hash); 
 
 
       // Mutate  map to FIX2INT the targets.  
@@ -2523,7 +2524,6 @@ RubyIlGenerator::saveStack(int32_t targetIndex)
          }
 
       }
-
    }
 
 /**

@@ -405,6 +405,12 @@ class RubyIlGenerator : public TR_IlGenerator, public TR_RubyByteCodeIteratorWit
     */
    TR::Block* _vm_exec_coreBlock; 
 
+   /**
+    * A stack memory region usable for allocation. 
+    * 
+    * Created and dies in genIL.
+    */
+   TR::StackMemoryRegion * _stackMemoryRegion;  
    };
 
 #endif
