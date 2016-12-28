@@ -2043,15 +2043,34 @@ RubyIlGenerator::hash_to_map(TR::StackMemoryRegion& region, VALUE hash)
 int32_t
 RubyIlGenerator::genOptCaseDispatch(CDHASH hash, OFFSET else_offset)  
       {
+      // #define JUMP(dst)          (VM_REG_PC += (dst))
       TR::StackMemoryRegion stackMemoryRegion(*trMemory());
       auto targets = hash_to_map(stackMemoryRegion, hash); 
+
+
+      // Mutate  map to FIX2INT the targets.  
+      for (auto& entry : *targets) {
+         entry.second = FIX2INT(entry.second); 
+      }
+
+      // Need to inject else_offset into the target map. 
+      targets->insert(std::make_pair(else_offset,else_offset)); 
+
+      // Trace print map. 
       traceMsg(comp(), "case_dispatch_map {\n"); 
-      for (auto entry : *targets) {
-         traceMsg(comp(), "\t%d -> +%d,\n", entry.first, FIX2INT(entry.second)); 
+      for (auto& entry : *targets) {
+         if (entry.first == else_offset) 
+            traceMsg(comp(), "\t%d -> +%d,  <- else\n", entry.first, entry.second); 
+         else
+            traceMsg(comp(), "\t%d -> +%d,\n", entry.first, entry.second); 
       }
       traceMsg(comp(), "}\n"); 
 
+
       TR::Node* key = pop(); 
+
+      //Selector is a call to vm_compute_case_dest which returns the destination 
+      //bytecode index. 
       TR::Node* selector = genCall(RubyHelper_vm_compute_case_dest, TR::icall, 3, 
                                    TR::Node::aconst((uintptr_t)hash), 
                                    TR::Node::aconst((uintptr_t)else_offset), 
@@ -2068,16 +2087,16 @@ RubyIlGenerator::genOptCaseDispatch(CDHASH hash, OFFSET else_offset)
       int32_t child = 2;  //First two children are selector and default case.
       for (auto iter = targets->begin(); iter != targets->end(); ++iter, ++child)
          {
-         auto targetIndex = FIX2INT(iter->second); 
+         auto targetIndex = iter->second; 
          auto bclen       = byteCodeLength(current()); 
-         traceMsg(comp(), "case %d -> (%d + %d + %d= %d)\n", iter->first, bclen, targetIndex , _bcIndex, bclen + targetIndex + _bcIndex);
+         traceMsg(comp(), "case %d -> (%d + %d + %d= %d)\n", iter->second, bclen, targetIndex , _bcIndex, bclen + targetIndex + _bcIndex);
 
          // When the JUMP is executed, we've already advanced PC by bclen,
          // so need to take that into account when computing the destination. 
          auto * target = genTarget(bclen + targetIndex + _bcIndex);
 
          switchNode->setAndIncChild(child,
-                                    TR::Node::createCase(0, target, iter->first));
+                                    TR::Node::createCase(0, target, iter->second));
          }
 
       genTreeTop(switchNode); 
