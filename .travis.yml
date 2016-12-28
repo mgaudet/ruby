@@ -60,6 +60,7 @@ script:
 branches:
   only:
     - ruby_2_4_omr_preliminary
+    - ruby_2_4_omr
 
 # Local Variables:
 # mode: YAML
