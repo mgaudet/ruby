@@ -25,19 +25,65 @@ get_jit_dll_name() {
 }
 
 /**
+ * The JIT options string sourced from the command line.
+ *
+ * set_jit_options ensures it's prefixed with -Xjit:, as that
+ * is what the OMR options processor expects
+ */
+static char * jit_options_string = NULL;
+
+/**
+ * Copies the provided option into a self allocated buffer
+ *
+ * FIXME: tiny leak: Should probably be freed. 
+ */
+void 
+set_jit_options(const char * options) {
+   int optlen = 0; 
+   const char * format = "%s"; 
+
+   if (!options) return; 
+
+   optlen = strlen(options) + 6 /* -Xjit: */ + 1 /* NULL */;
+   jit_options_string = malloc(optlen); 
+
+   if (strncmp(options, "-Xjit", 5) != 0) {
+      format = "-Xjit:%s"; 
+   } 
+
+   snprintf(jit_options_string, optlen, format,  options);
+
+   if (getenv("TRACE_JIT_OPTIONS")) 
+      fprintf(stderr, "[TRACE_JIT_OPTIONS] set options to  %s\n", jit_options_string); 
+   return;
+}
+
+/**
  * Return the options string to feed to jit_init. 
+ *
+ * Preferrs environment variables. 
  *
  */
 char *
 get_jit_options() { 
-   char *jit_options = getenv("OMR_JIT_OPTIONS");
-   if (jit_options) {
-      if (strncmp(jit_options, "-Xjit", 5) != 0) {
-         fprintf(stderr, "[FATAL] invalid OMR_JIT_OPTIONS <[%s]>\n", jit_options);
+   char *env_jit_options = getenv("OMR_JIT_OPTIONS");
+   if (env_jit_options) {
+      if (strncmp(env_jit_options, "-Xjit", 5) != 0) {
+         fprintf(stderr, "[FATAL] invalid OMR_JIT_OPTIONS <[%s]> (prefix with -Xjit:)\n", env_jit_options);
          exit(EXIT_FAILURE);
       }
+
+      if (jit_options_string) {
+         fprintf(stderr, "Warning: JIT options already set on command line. Preferring env var (%s) to command line (%s)\n", env_jit_options, jit_options_string); 
+      }
+
+      if (getenv("TRACE_JIT_OPTIONS")) 
+         fprintf(stderr, "[TRACE_JIT_OPTIONS] Returning %s\n", env_jit_options); 
+      return env_jit_options;
    }
-   return jit_options;
+   if (getenv("TRACE_JIT_OPTIONS")) 
+      fprintf(stderr, "[TRACE_JIT_OPTIONS] Returning %s\n", jit_options_string); 
+   return jit_options_string; 
 }
 
 

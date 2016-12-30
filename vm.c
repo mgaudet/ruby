@@ -3078,13 +3078,18 @@ rb_vm_set_progname(VALUE filename)
 
 extern const struct st_hash_type rb_fstring_hash_type;
 
+#ifdef JIT_OMR
+/**
+ * Used to capture important global variable addresses the JIT 
+ * will reference
+ */
+jit_globals_t jit_globals; 
+#endif
+
 void
 Init_BareVM(void)
 {
     /* VM bootstrap: phase 1 */
-#if defined(JIT_OMR)
-    jit_globals_t globals; 
-#endif
     rb_vm_t * vm = ruby_mimmalloc(sizeof(*vm));
     rb_thread_t * th = ruby_mimmalloc(sizeof(*th));
     if (!vm || !th) {
@@ -3095,16 +3100,16 @@ Init_BareVM(void)
     rb_thread_set_current_raw(th);
 
     vm_init2(vm);
-
-#if defined(JIT_OMR)
-    globals.ruby_vm_global_constant_state_ptr = &ruby_vm_global_constant_state;
-    globals.ruby_rb_mRubyVMFrozenCore_ptr     = &rb_mRubyVMFrozenCore;
-    globals.ruby_vm_event_flags_ptr           = &ruby_vm_event_flags;
-    globals.redefined_flag_ptr                = vm->redefined_flag;
-    vm_jit_init(vm, globals);
-#endif
     vm->objspace = rb_objspace_alloc();
     ruby_current_vm = vm;
+
+#if defined(JIT_OMR)
+    jit_globals.ruby_vm_global_constant_state_ptr = &ruby_vm_global_constant_state;
+    jit_globals.ruby_rb_mRubyVMFrozenCore_ptr     = &rb_mRubyVMFrozenCore;
+    jit_globals.ruby_vm_event_flags_ptr           = &ruby_vm_event_flags;
+    jit_globals.redefined_flag_ptr                = vm->redefined_flag;
+#endif
+
 
     Init_native_thread();
     th->vm = vm;
