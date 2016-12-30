@@ -18,6 +18,7 @@
 #include "ruby/vm.h"
 #include "vm_core.h"
 #include "probes_helper.h"
+#include "jit.h"
 
 NORETURN(void rb_raise_jump(VALUE, VALUE));
 
@@ -230,6 +231,8 @@ ruby_cleanup(volatile int ex)
     return sysex;
 }
 
+extern jit_globals_t jit_globals; 
+
 static int
 ruby_exec_internal(void *n)
 {
@@ -238,6 +241,12 @@ ruby_exec_internal(void *n)
     rb_thread_t *th = GET_THREAD();
 
     if (!n) return 0;
+
+#ifdef JIT_OMR
+    if (!GET_VM()->jit) { 
+      vm_jit_init(GET_VM(), jit_globals);
+    }
+#endif
 
     TH_PUSH_TAG(th);
     if ((state = EXEC_TAG()) == 0) {

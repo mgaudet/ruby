@@ -608,7 +608,6 @@ ruby_init_loadpath_safe(int safe_level)
     rb_const_set(rb_cObject, rb_intern_const("TMP_RUBY_PREFIX"), rb_obj_freeze(PREFIX_PATH()));
 }
 
-
 static void
 add_modules(VALUE *req_list, const char *mod)
 {
@@ -893,6 +892,8 @@ set_option_encoding_once(const char *type, VALUE *name, const char *e, long elen
 #define set_source_encoding_once(opt, e, elen) \
     set_option_encoding_once("source", &(opt)->src.enc.name, (e), (elen))
 
+extern void set_jit_options(const char* options); 
+
 static long
 proc_options(long argc, char **argv, ruby_cmdline_options_t *opt, int envopt)
 {
@@ -1030,7 +1031,19 @@ proc_options(long argc, char **argv, ruby_cmdline_options_t *opt, int envopt)
 	    rb_str_cat2(opt->e_script, s);
 	    rb_str_cat2(opt->e_script, "\n");
 	    break;
-
+         
+          case 'J':
+#if JIT_OMR
+            if (*++s) {
+		set_jit_options(s);
+	    }
+	    else if (argc > 1) {
+		set_jit_options("-Xjit:");
+	    }
+#else
+            rb_raise(rb_eRuntimeError, "Not compiled with JIT support");
+#endif
+            break; 
 	  case 'r':
 	    forbid_setid("-r");
 	    if (*++s) {
@@ -1041,7 +1054,6 @@ proc_options(long argc, char **argv, ruby_cmdline_options_t *opt, int envopt)
 		argc--, argv++;
 	    }
 	    break;
-
 	  case 'i':
 	    if (envopt) goto noenvopt;
 	    forbid_setid("-i");
