@@ -3107,38 +3107,25 @@ vm_compute_case_dest(CDHASH hash, OFFSET else_offset, VALUE key)
 static void
 vm_send_woblock_jit_inline_frame(rb_thread_t *th, CALL_INFO ci, CALL_CACHE cc, VALUE recv)
 {                                                                                     
-   VALUE *argv,*sp = NULL;
-   const rb_iseq_t *iseq = NULL;
-   rb_control_frame_t *cfp = th->cfp;
+   const rb_iseq_t *iseq = def_iseq_ptr(cc->me->def);
+   const int param_size = iseq->body->param.size;
+   const int local_size = iseq->body->local_table_size;
+   struct rb_calling_info calling; 
 
-   VM_ASSERT(cc->me); /* Should exist because we inlined a function, *and* passsed the guard!  */ 
+   calling.block_handler = VM_BLOCK_HANDLER_NONE;
+   calling.argc = ci->orig_argc;
+   calling.recv = recv; 
+   
+   VM_ASSERT(simple_iseq_p(iseq)); 
 
-   /*vm_callee_setup_arg: This is currently a limitation of the inliner. */
-   VM_ASSERT(simple_iseq_p(iseq));
-   iseq = def_iseq_ptr(cc->me->def);                                                
-
-   /* vm_call_iseq_setup_normal(rb_thread_t *th, rb_control_frame_t *cfp, rb_call_info_t *ci) */
-   argv = cfp->sp - ci->orig_argc; 
-   sp = argv + iseq->body->param.size;                                                       
-   cfp->sp = argv - 1; 
-
-   vm_push_frame(th,                                                    /* thread       */
-                 iseq,                                                  /* iseq         */ 
-                 VM_FRAME_MAGIC_METHOD | VM_FRAME_FLAG_JITTED,          /* type         */
-                 recv,                                                  /* self         */ 
-                 th->cfp->ep,                                           /* specval      */
-                 (VALUE)cc->me,                                         /* cref_or_me   */ 
-                 iseq->body->iseq_encoded /* + 0 (opt pc) */,           /* PC           */  
-                 sp,                                                    /* sp           */  
-                 iseq->body->local_table_size - iseq->body->param.size, /* local_size   */
-                 iseq->body->stack_max);                                /* stack_max    */ 
-
-   if (getenv("TRACE_INLINE_FRAME")) { 
-      fprintf(stderr, "New inline frame: cfp: %p sp: %p ep: %p\n", 
-              th->cfp,
-              th->cfp->sp,
-              th->cfp->ep);
-   }
+   vm_call_iseq_setup_normal(th, 
+                             th->cfp,
+                             &calling,
+                             ci,
+                             cc,
+                             0, /* opt_pc: This needs to change if the inlined iseq !simple_iseq_p */
+                             param_size, 
+                             local_size);
 }
 
 static
