@@ -1511,6 +1511,28 @@ vm_call_iseq_setup_normal(rb_thread_t *th, rb_control_frame_t *cfp, struct rb_ca
     return Qundef;
 }
 
+/**
+ * Identical to vm_call_iseq_setup_normal, except iseq is passed in by inlined body
+ * rather than looked up from the call cache (which may no longer be valid for the 
+ * inlined body!
+ */
+static inline VALUE
+vm_call_iseq_setup_inliner(rb_thread_t *th, rb_control_frame_t *cfp, struct rb_calling_info *calling, const struct rb_call_info *ci, struct rb_call_cache *cc, const rb_iseq_t* iseq,
+			  int opt_pc, int param_size, int local_size)
+{
+    const rb_callable_method_entry_t *me = cc->me;
+    VALUE *argv = cfp->sp - calling->argc;
+    VALUE *sp = argv + param_size;
+    cfp->sp = argv - 1 /* recv */;
+
+    vm_push_frame(th, iseq, VM_FRAME_MAGIC_METHOD | VM_ENV_FLAG_LOCAL, calling->recv,
+		  calling->block_handler, (VALUE)me,
+		  iseq->body->iseq_encoded + opt_pc, sp,
+		  local_size - param_size,
+		  iseq->body->stack_max);
+    return Qundef;
+}
+
 static inline VALUE
 vm_call_iseq_setup_tailcall(rb_thread_t *th, rb_control_frame_t *cfp, struct rb_calling_info *calling, const struct rb_call_info *ci, struct rb_call_cache *cc,
 			    int opt_pc)
@@ -3105,9 +3127,8 @@ vm_compute_case_dest(CDHASH hash, OFFSET else_offset, VALUE key)
    }
 
 static void
-vm_send_woblock_jit_inline_frame(rb_thread_t *th, CALL_INFO ci, CALL_CACHE cc, VALUE recv)
+vm_send_woblock_jit_inline_frame(rb_thread_t *th, CALL_INFO ci, CALL_CACHE cc, const rb_iseq_t* iseq, VALUE recv)
 {                                                                                     
-   const rb_iseq_t *iseq = def_iseq_ptr(cc->me->def);
    const int param_size = iseq->body->param.size;
    const int local_size = iseq->body->local_table_size;
    struct rb_calling_info calling; 
@@ -3118,21 +3139,34 @@ vm_send_woblock_jit_inline_frame(rb_thread_t *th, CALL_INFO ci, CALL_CACHE cc, V
    
    VM_ASSERT(simple_iseq_p(iseq)); 
 
-   vm_call_iseq_setup_normal(th, 
-                             th->cfp,
-                             &calling,
-                             ci,
-                             cc,
-                             0, /* opt_pc: This needs to change if the inlined iseq !simple_iseq_p */
-                             param_size, 
-                             local_size);
+   vm_call_iseq_setup_inliner(th,
+                              th->cfp,
+                              &calling,
+                              ci,
+                              cc,
+                              iseq,
+                              0, /* opt_pc: This needs to change if the inlined iseq !simple_iseq_p */
+                              param_size,
+                              local_size);
 }
 
 static
-VALUE vm_send_woblock_inlineable_guard(CALL_CACHE cc, VALUE recv)
+VALUE vm_send_woblock_inlineable_guard(rb_serial_t method_state, rb_serial_t class_serial, VALUE recv)
 {
+    VALUE ret;
     VALUE klass = CLASS_OF(recv);
-    return (GET_GLOBAL_METHOD_STATE() == cc->method_state && RCLASS_SERIAL(klass) == cc->class_serial) && !getenv("FAIL_GUARD");
+    ret = (GET_GLOBAL_METHOD_STATE() == method_state && RCLASS_SERIAL(klass) == class_serial) && !getenv("FAIL_GUARD");
+    if (getenv("TRACE_GUARD")) {
+       fprintf(stderr, "[GUARD %s] method_state: %p, global_method_state: %p,  recv: %p, klass: %p klass_serial: %p, class_serial %p\n",
+               ret ? "PASSED" : "FAILED",
+               method_state,
+               GET_GLOBAL_METHOD_STATE(),
+               recv,
+               klass,
+               RCLASS_SERIAL(klass),
+               class_serial);
+    }
+    return ret;
 }
 
 

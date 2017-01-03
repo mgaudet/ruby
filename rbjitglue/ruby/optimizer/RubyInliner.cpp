@@ -310,8 +310,9 @@ Ruby::InlinerUtil::InlinerUtil(TR::Compilation *comp)
  * FIXME: Should probably be replaced with a tree sequence at somepoint. 
  */   
 void
-Ruby::InlinerUtil::calleeTreeTopPreMergeActions(TR::ResolvedMethodSymbol *calleeResolvedMethodSymbol, TR_CallSite* callSite)
+Ruby::InlinerUtil::calleeTreeTopPreMergeActions(TR::ResolvedMethodSymbol *calleeResolvedMethodSymbol, TR_CallTarget* calltarget)
    {
+   TR_CallSite* callSite = calltarget->_myCallSite;
    TR::Node* send_without_block_call_Node = callSite->_callNode;
 
    // Ensure looks like a call! 
@@ -319,6 +320,10 @@ Ruby::InlinerUtil::calleeTreeTopPreMergeActions(TR::ResolvedMethodSymbol *callee
 
    CALL_INFO  ci = reinterpret_cast<CALL_INFO>(send_without_block_call_Node->getSecondChild()->getAddress());
    CALL_CACHE cc = reinterpret_cast<CALL_CACHE>(send_without_block_call_Node->getThirdChild()->getAddress());
+
+   const rb_iseq_t* iseq = static_cast<ResolvedRubyMethod*>(calltarget->_calleeMethod)->getRubyMethodBlock().iseq();
+   TR_ASSERT(iseq, "Didn't find an iseq");
+   traceMsg(comp(), "got callee iseq as %p\n",iseq);
 
 
    TR::TreeTop * startOfInlinedCall = calleeResolvedMethodSymbol->getFirstTreeTop()->getNextTreeTop();
@@ -332,10 +337,11 @@ Ruby::InlinerUtil::calleeTreeTopPreMergeActions(TR::ResolvedMethodSymbol *callee
    TR::SymbolReference* receiverTempSymRef = comp()->getSymRefTab()->getRubyInlinedReceiverTempSymRef(callSite);
    TR_ASSERT(receiverTempSymRef != NULL, "NULL receiverTempSymRef, findCallSiteTarget didn't store receiver to a temporary.");
 
-   TR::TreeTop* vm_frame_setup_call_TT = genCall(comp(), RubyHelper_vm_send_woblock_jit_inline_frame, callOpCode, 4,
+   TR::TreeTop* vm_frame_setup_call_TT = genCall(comp(), RubyHelper_vm_send_woblock_jit_inline_frame, callOpCode, 5,
                                                  TR::Node::createLoad(threadSymRef),
                                                  TR::Node::aconst((uintptr_t)ci), //Can we just anchor and recycle the above child nodes? or different blocks?
                                                  TR::Node::aconst((uintptr_t)cc),
+                                                 TR::Node::aconst((uintptr_t)iseq),
                                                  TR::Node::createLoad(receiverTempSymRef)
                                                 );
 
