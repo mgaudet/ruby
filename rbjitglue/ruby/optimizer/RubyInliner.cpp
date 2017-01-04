@@ -149,23 +149,39 @@ TR_InlinerBase::checkInlineableWithoutInitialCalleeSymbol (TR_CallSite* callSite
       != comp->getSymRefTab()->getSymRef(RubyHelper_vm_send_without_block))
       return Ruby_unsupported_calltype;
 
+   // Ensure call looks like how we need. 
    verify_children(node); 
-   /*
-    * Preconditions:
-    *     true == (ci->me->def->type == VM_METHOD_TYPE_ISEQ)
-    *             If its not a proper Ruby method, all bets are off.
-    *     true == (iseq->arg_simple & 0x01)
-    *             Have simple args, otherwise in vm_callee_setup_arg we have to handle (ci->aux.opt_pc != 0)
-    *             And that requires multiple method entry.
-    *     false == (ci->flag & VM_CALL_TAILCALL)
-    *             Here we're handling the case of normal calls via vm_call_iseq_setup_normal.
-    *             For TailCalls we will need to work with vm_call_iseq_setup_tailcall.
-    *             The JIT currently doesn't compile methods of type VM_CALL_TAILCALL.
-    */
 
    CALL_INFO  ci = reinterpret_cast<CALL_INFO> (node->getSecondChild()->getAddress());
-   CALL_CACHE cc = reinterpret_cast<CALL_CACHE>(node->getThirdChild()->getAddress());
+   /*
+    * splat args require a call to vm_caller_setup_arg_splat. 
+    */
+   if (ci->flag & VM_CALL_ARGS_SPLAT)
+      { 
+      TR::DebugCounter::incStaticDebugCounter(comp, TR::DebugCounter::debugCounterName(comp, "ruby.callSites/send_without_block/notInlineable/splattedArgs"));
+      return Ruby_unsupported_calltype;
+      }
+  
+   /* 
+    * Tailcalls require special support. 
+    */ 
+   if (ci->flag & VM_CALL_TAILCALL)
+      { 
+      TR::DebugCounter::incStaticDebugCounter(comp, TR::DebugCounter::debugCounterName(comp, "ruby.callSites/send_without_block/notInlineable/tailcall"));
+      return Ruby_unsupported_calltype;
+      }
 
+   /*
+    * Keyword args require a call to vm_caller_setup_arg_kw 
+    */
+   if (ci->flag & VM_CALL_KWARG)
+      { 
+      TR::DebugCounter::incStaticDebugCounter(comp, TR::DebugCounter::debugCounterName(comp, "ruby.callSites/send_without_block/notInlineable/keyword"));
+      return Ruby_unsupported_calltype;
+      }
+
+
+   CALL_CACHE cc = reinterpret_cast<CALL_CACHE>(node->getThirdChild()->getAddress());
    const rb_callable_method_entry_t *me = cc->me; 
    if(!me)
       {
@@ -173,10 +189,11 @@ TR_InlinerBase::checkInlineableWithoutInitialCalleeSymbol (TR_CallSite* callSite
       return Ruby_missing_method_entry;
       }
 
-   if (!me->def) {
+   if (!me->def)
+      {
       TR::DebugCounter::incStaticDebugCounter(comp, TR::DebugCounter::debugCounterName(comp, "ruby.callSites/send_without_block/notInlineable/missing_Def"));
       return Ruby_non_iseq_method;
-   }
+      }
 
    /*
     * Wed Jun 03 10:35:45 2015  Koichi Sasada  <ko1@atdot.net>
