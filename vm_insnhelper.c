@@ -1525,7 +1525,7 @@ vm_call_iseq_setup_inliner(rb_thread_t *th, rb_control_frame_t *cfp, struct rb_c
     VALUE *sp = argv + param_size;
     cfp->sp = argv - 1 /* recv */;
 
-    vm_push_frame(th, iseq, VM_FRAME_MAGIC_METHOD | VM_ENV_FLAG_LOCAL, calling->recv,
+    vm_push_frame(th, iseq, VM_FRAME_MAGIC_METHOD | VM_ENV_FLAG_LOCAL | VM_FRAME_FLAG_JITTED , calling->recv,
 		  calling->block_handler, (VALUE)me,
 		  iseq->body->iseq_encoded + opt_pc, sp,
 		  local_size - param_size,
@@ -3152,20 +3152,23 @@ vm_send_woblock_jit_inline_frame(rb_thread_t *th, CALL_INFO ci, CALL_CACHE cc, c
 
 static
 VALUE vm_send_woblock_inlineable_guard(rb_serial_t method_state, rb_serial_t class_serial, VALUE recv)
-{
-    VALUE ret;
-    VALUE klass = CLASS_OF(recv);
-    ret = (GET_GLOBAL_METHOD_STATE() == method_state && RCLASS_SERIAL(klass) == class_serial) && !getenv("FAIL_GUARD");
-    if (getenv("TRACE_GUARD")) {
-       fprintf(stderr, "[GUARD %s] method_state: %p, global_method_state: %p,  recv: %p, klass: %p klass_serial: %p, class_serial %p\n",
-               ret ? "PASSED" : "FAILED",
-               method_state,
-               GET_GLOBAL_METHOD_STATE(),
-               recv,
-               klass,
-               RCLASS_SERIAL(klass),
-               class_serial);
-    }
+   {
+   VALUE ret;
+   VALUE klass = CLASS_OF(recv);
+   ret = (GET_GLOBAL_METHOD_STATE() == method_state && RCLASS_SERIAL(klass) == class_serial) && !getenv("FAIL_GUARD");
+   if (getenv("TRACE_GUARD")) {
+      if (atoi(getenv("TRACE_GUARD")) > 1 || 
+          !ret) {
+         fprintf(stderr, "[GUARD %s] method_state: %p, global_method_state: %p,  recv: %p, klass: %p klass_serial: %p, class_serial %p\n",
+                 ret ? "PASSED" : "FAILED",
+                 method_state,
+                 GET_GLOBAL_METHOD_STATE(),
+                 recv,
+                 klass,
+                 RCLASS_SERIAL(klass),
+                 class_serial);
+      }
+   }
     return ret;
 }
 
