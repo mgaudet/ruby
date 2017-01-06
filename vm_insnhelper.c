@@ -3136,8 +3136,10 @@ vm_send_woblock_jit_inline_frame(rb_thread_t *th, CALL_INFO ci, CALL_CACHE cc, c
    calling.block_handler = VM_BLOCK_HANDLER_NONE;
    calling.argc = ci->orig_argc;
    calling.recv = recv; 
-   
+  
+#if VM_CHECK_MODE > 1 
    VM_ASSERT(simple_iseq_p(iseq)); 
+#endif
 
    vm_call_iseq_setup_inliner(th,
                               th->cfp,
@@ -3155,7 +3157,9 @@ VALUE vm_send_woblock_inlineable_guard(rb_serial_t method_state, rb_serial_t cla
    {
    VALUE ret;
    VALUE klass = CLASS_OF(recv);
-   ret = (GET_GLOBAL_METHOD_STATE() == method_state && RCLASS_SERIAL(klass) == class_serial) && !getenv("FAIL_GUARD");
+   ret = (GET_GLOBAL_METHOD_STATE() == method_state && RCLASS_SERIAL(klass) == class_serial);
+#if VM_CHECK_MODE >= 1
+   ret = ret && !getenv("FAIL_GUARD")
    if (getenv("TRACE_GUARD")) {
       if (atoi(getenv("TRACE_GUARD")) > 1 || 
           !ret) {
@@ -3169,7 +3173,8 @@ VALUE vm_send_woblock_inlineable_guard(rb_serial_t method_state, rb_serial_t cla
                  class_serial);
       }
    }
-    return ret;
+#endif
+   return ret;
 }
 
 
