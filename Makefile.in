@@ -282,7 +282,7 @@ omr-clean:
 JIT_PARAOPT ?= -j4 
 JIT_CONFIG ?= debug
 
-$(JIT_SO_NAME): omr-configure.stamp
+$(JIT_SO_NAME): omr-configure.stamp vm.$(OBJEXT) 
 	$(MAKE) $(JIT_PARAOPT) -C $(RBJITGLUE_DIR)/ruby \
 	   OMRDIR=$(OMRDIR) \
 	   RUBY_DIR=$(abs_srcdir)\
