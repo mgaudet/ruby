@@ -828,8 +828,8 @@ class RubyVM
           'GET_SP'                => 'GET_SP()    (th->cfp->sp)',
           'GET_PC'                => 'GET_SP()    (th->cfp->pc)',
           'TOPN'                  => "TOPN(x)     (*(th->cfp->sp - (x) - 1 ))",
-          'NEXT_INSN'             => "NEXT_INSN() ", # Fallthrough to Return
-          #'THROW_EXCEPTION'       => "THROW_EXCEPTION(val) assert(0 && val && \"THROW_EXECEPTION in a callback doesn't work yet.\")",
+          'NEXT_INSN'             => "NEXT_INSN() ",                    # Fallthrough to Return
+          'THROW_EXCEPTION'       => "THROW_EXCEPTION(x) val = x",      # Save arg to return value... 
           'JUMP'                  => "JUMP(dst)   assert(0 && \"JUMP      in a callback is broken at the moment\")",
           'INSN_LABEL'            => "INSN_LABEL(lab)  LABEL_#{@name}_##lab",
           'REG_SP'                => "REG_SP (th->cfp->sp)",
@@ -1011,6 +1011,10 @@ class RubyVM
            container << "/* Skipping instruction `#{insn.name}` as it's optimized, and will require special handling of opt/unified operands.  */\n" 
         elsif has_elipsis insn
            container << "/* Skipping instruction `#{insn.name}` has elipsis */\n" 
+        elsif (insn.rets.length == 0) && (has_throw_exception insn)
+           container << "/* Skipping instruction `#{insn.name}`      "
+           container << " *   Has THROW_EXCEPTION and no return... \n"
+           container << " */\n"
         else  
            jc = JitCallback.new(insn) 
            container << extract.call(jc) 
@@ -1023,6 +1027,10 @@ class RubyVM
 
     #######
     private
+
+    def has_throw_exception insn
+        /THROW_EXCEPTION/.match(insn.body)
+    end
 
     def has_elipsis insn
       # puts "insn: #{insn.rets} "
