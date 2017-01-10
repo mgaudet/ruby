@@ -25,10 +25,21 @@ compiler:
 
 os:
   - linux
+  - osx 
 
 env:
   - CONFIG_OPTS=--with-omr-jit SPEC=linux_x86-64 LD_LIBRARY_PATH=$PWD OMR_JIT_OPTIONS=-Xjit:count=0
+  - CONFIG_OPTS=--with-omr-jit SPEC=osx_x86-64   LD_LIBRARY_PATH=$PWD OMR_JIT_OPTIONS=-Xjit:count=0
   - CONFIG_OPTS=--without-omr-jit
+
+matrix:
+  exclude:
+    - os: linux
+      env: CONFIG_OPTS=--with-omr-jit SPEC=osx_x86-64   LD_LIBRARY_PATH=$PWD OMR_JIT_OPTIONS=-Xjit:count=0
+    - os: osx 
+      env: CONFIG_OPTS=--with-omr-jit SPEC=linux_x86-64 LD_LIBRARY_PATH=$PWD OMR_JIT_OPTIONS=-Xjit:count=0
+
+
 
 before_install:
   - "CONFIG_FLAG="
