@@ -1509,7 +1509,7 @@ RubyIlGenerator::genCall_preparation(CALL_INFO ci, uint32_t numArgs, int32_t& re
          else
             {
             // We also write out non-args back to the stack in order to make OSR
-            // workk.
+            // work.
             //
             // We peek at the pending trees however, to avoid having to reload
             // these values in a block.
@@ -1599,6 +1599,25 @@ void
 RubyIlGenerator::trace(rb_num_t nf)
    {
    static_assert(sizeof(nf) == TR_RubyFE::SLOTSIZE, "xconst for trace isn't valid unless nf == sizeof slot");
+   // Inside vm_trace_jit
+   //
+   //  EXEC_EVENT_HOOK(th, flag, GET_SELF(), 0, 0, 0 /* id and klass are resolved at callee */,
+   //                 (flag & (RUBY_EVENT_RETURN | RUBY_EVENT_B_RETURN)) ? TOPN(0) : Qundef);
+   //
+   // Which means that if ( nf & (RUBY_EVENT_B_RETURN | RUBY_EVENT_B_RETURN) )
+   // we need to restore the topmost stack element if it hasn't been already.
+
+   auto pending = _stack->size();
+   if (pending > 0 ) {
+      auto *privateSP = loadPrivateSP();
+
+      rematerializeSP(); // So that TOPN(0) will work.
+
+      auto *shadow = getStackSymRef(pending - 1); // Need the shadow for the topmost stack slot.
+      auto store = xstorei(shadow, privateSP, topn(0));
+      genTreeTop(store);
+   }
+
    genCall(RubyHelper_vm_trace, TR::Node::xcallOp(), 2,
            loadThread(),
            TR::Node::xconst(nf));
