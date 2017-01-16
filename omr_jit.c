@@ -65,25 +65,18 @@ set_jit_options(const char * options) {
  *
  */
 char *
-get_jit_options() { 
+get_jit_options() {
    char *env_jit_options = getenv("OMR_JIT_OPTIONS");
    if (env_jit_options) {
-      if (strncmp(env_jit_options, "-Xjit", 5) != 0) {
-         fprintf(stderr, "[FATAL] invalid OMR_JIT_OPTIONS <[%s]> (prefix with -Xjit:)\n", env_jit_options);
-         exit(EXIT_FAILURE);
-      }
-
       if (jit_options_string) {
-         fprintf(stderr, "Warning: JIT options already set on command line. Preferring env var (%s) to command line (%s)\n", env_jit_options, jit_options_string); 
+         fprintf(stderr, "Warning: JIT options already set on command line. Preferring env var (%s) to command line (%s)\n", env_jit_options, jit_options_string);
       }
 
-      if (getenv("TRACE_JIT_OPTIONS")) 
-         fprintf(stderr, "[TRACE_JIT_OPTIONS] Returning %s\n", env_jit_options); 
-      return env_jit_options;
+      set_jit_options(env_jit_options);
    }
-   if (getenv("TRACE_JIT_OPTIONS")) 
-      fprintf(stderr, "[TRACE_JIT_OPTIONS] Returning %s\n", jit_options_string); 
-   return jit_options_string; 
-}
 
+   if (getenv("TRACE_JIT_OPTIONS"))
+      fprintf(stderr, "[TRACE_JIT_OPTIONS] Returning %s\n", jit_options_string);
+   return jit_options_string;
+}
 
