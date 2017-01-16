@@ -58,7 +58,6 @@ static const OptimizationStrategy rubyNoOptStrategyOpts[] =
 
 static const OptimizationStrategy rubyColdStrategyOpts[] =
    {
-   { OMR::trivialInlining                                                    },
    { OMR::rubyIlFastpather                                                   },
    { OMR::basicBlockExtension                                                },
    { OMR::localCSE                                                           },
@@ -75,7 +74,8 @@ static const OptimizationStrategy rubyColdStrategyOpts[] =
 
 static const OptimizationStrategy rubyWarmStrategyOpts[] =
    {
-   //{ rubyIlFastpather                                                   },
+   { OMR::trivialInlining                                                    },
+   { OMR::rubyIlFastpather                                                   },
    { OMR::basicBlockExtension                                                },
    { OMR::localCSE                                                           },
    { OMR::treeSimplification                                                 },

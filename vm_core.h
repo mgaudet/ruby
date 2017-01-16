@@ -1232,7 +1232,7 @@ VM_BH_ISEQ_BLOCK_P(VALUE block_handler)
 {
     if ((block_handler & 0x03) == 0x01) {
 #if VM_CHECK_MODE > 0
-	struct rb_captured_block *captured = VM_TAGGED_PTR_REF(block_handler, 0x03);
+	struct rb_captured_block *captured = (struct rb_captured_block*)VM_TAGGED_PTR_REF(block_handler, 0x03);
 	VM_ASSERT(RB_TYPE_P(captured->code.val, T_IMEMO));
 	VM_ASSERT(imemo_type(captured->code.val) == imemo_iseq);
 #endif
@@ -1264,7 +1264,7 @@ VM_BH_IFUNC_P(VALUE block_handler)
 {
     if ((block_handler & 0x03) == 0x03) {
 #if VM_CHECK_MODE > 0
-	struct rb_captured_block *captured = (void *)(block_handler & ~0x03);
+	struct rb_captured_block *captured = (struct rb_captured_block *)(block_handler & ~0x03);
 	VM_ASSERT(RB_TYPE_P(captured->code.val, T_IMEMO));
 	VM_ASSERT(imemo_type(captured->code.val) == imemo_ifunc);
 #endif
