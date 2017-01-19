@@ -3134,6 +3134,17 @@ vm_call_iseq_setup_inliner(rb_thread_t *th,
     return Qundef;
 }
 
+static VALUE
+vm_getinstancevariable_jit(VALUE obj, ID id, IC ic)
+{
+    return vm_getivar(obj, id, ic, 0, 0);
+}
+
+static void
+vm_setinstancevariable_jit(VALUE obj, ID id, VALUE val, IC ic)
+{
+    vm_setivar(obj, id, val, ic, 0, 0);
+}
 
 static void
 vm_send_woblock_jit_inline_frame(rb_thread_t *th, CALL_INFO ci, CALL_CACHE cc, const rb_iseq_t* iseq, VALUE recv, const rb_callable_method_entry_t *me)

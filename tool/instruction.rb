@@ -671,25 +671,25 @@ class RubyVM
     end
   end
 
-  # A helper class to make constructing callbacks easier 
+  # A helper class to make constructing callbacks easier
   class JitCallback
-    def initialize insn 
+    def initialize insn
        @insn          = insn
-       @defines       = [] 
+       @defines       = []
        @arguments     = []
        @return        = 'void'
-       
+
        # mostly for convenience.
        @name          = insn.name
        @body          = insn.body.dup
 
-       analyze 
+       analyze
 
     end
-   
-    def comment str 
+
+    def comment str
       str
-    end 
+    end
 
     def emit
        function = ''
@@ -702,9 +702,9 @@ class RubyVM
        function <<  "/* defines   (computed): #{@defines.to_s}*/\n"
        function <<  "/* return    (computed): #{@return.to_s}*/\n"
        function <<  "/* ===================================*/\n"
-       function << emit_signature 
+       function << emit_signature
        # puts @defines
-       function << emit_defines 
+       function << emit_defines
        function << "{\n"
        function << emit_body
        function << "}\n\n"
@@ -715,14 +715,14 @@ class RubyVM
     # Emit the signature of this method
     def emit_signature
        return "#{@return}\nvm_#{@name}_jit(#{@arguments.join(", ")})\n"
-    end 
+    end
 
-    # Emit the function pointer signature 
+    # Emit the function pointer signature
     def emit_function_pointer
        return "#{@return}\t(*vm_#{@name}_f)\t\t(#{@arguments.join(", ")});"
     end
 
-    # Initialize a particular structure's value with the function. 
+    # Initialize a particular structure's value with the function.
     def emit_initialization structure
        return "#{structure}vm_#{@name}_f = \t\tvm_#{@name}_jit;"
     end
@@ -732,7 +732,7 @@ class RubyVM
     private
 
     # Analysis
-    def analyze 
+    def analyze
        analyze_args
        analyze_body
        analyze_return
@@ -742,9 +742,9 @@ class RubyVM
        @defines.uniq!
     end
 
-    # Return true if an argument would confict 
-    # with a generated return. 
-    def argument_conflict retval 
+    # Return true if an argument would confict
+    # with a generated return.
+    def argument_conflict retval
        type,name = retval
        #puts "Checking '#{type} #{name}' for conflict in #{@arguments}"
        for k in @arguments
@@ -755,7 +755,7 @@ class RubyVM
        return false
     end
 
-    # Duplicated from not _jit version -- Needs refactoring badly. 
+    # Duplicated from not _jit version -- Needs refactoring badly.
     def make_header_stack_val_jit insn
       # puts "DEFOPES (1): #{insn.name} #{insn.defopes.to_s}"
       vars = insn.opes + insn.pops + insn.defopes.map{|e| e[0]}
@@ -775,7 +775,7 @@ class RubyVM
       vars = insn.defopes
       # puts "DEFOPES(3): #{insn.name} #{vars.to_s}"
       vars.each{|e|
-        @defines << [e[0][1],"#{e[0][1]} #{e[1]}"] unless e[1] == '*' 
+        @defines << [e[0][1],"#{e[0][1]} #{e[1]}"] unless e[1] == '*'
       }
     end
 
@@ -787,30 +787,30 @@ class RubyVM
           # Return type
           @return = @insn.rets[0][0]
 
-          # Prepend unless conflict with an argument. 
+          # Prepend unless conflict with an argument.
           # @body.insert(0,"    #{@insn.rets[0][0]} #{@insn.rets[0][1]};\n") unless argument_conflict @insn.rets[0]
           #  puts "==============================="
-          #  puts "Body pre-analysis: #{insn.name}" 
+          #  puts "Body pre-analysis: #{insn.name}"
           #  puts @body
 
           #  puts "-------------------------------"
           # puts "-------------------------------"
-          # puts "Body post-analysis:" 
+          # puts "Body post-analysis:"
           # puts @body
           # puts "==============================="
 
-          @body << "\n /* Adding 1 arg return */" 
+          @body << "\n /* Adding 1 arg return */"
           @body << "\n    return #{@insn.rets[0][1]};\n"
        else
           #Return type defaults to void
-          @body << "\n /* Adding 0 arg return */" 
+          @body << "\n /* Adding 0 arg return */"
           @body << "\n    return;\n"
        end
     end
 
-    def analyze_body 
+    def analyze_body
        analyze_body_for_required_arguments
-       analyze_body_for_required_defines 
+       analyze_body_for_required_defines
        analyze_body_for_non_macro_defines
        analyze_body_for_indirect_defines_and_args
     end
@@ -818,10 +818,10 @@ class RubyVM
     # Map defines to redefinitions.
     def get_define_map
        # Map must jibe with argument logic.
-       # Don't include #define, will be prepended at emit, 
-       # key doesn't include args if they exist, to simplify  
+       # Don't include #define, will be prepended at emit,
+       # key doesn't include args if they exist, to simplify
        # undef code.
-       defines = { 
+       defines = {
           'RESTORE_REGS'          => "RESTORE_REGS()",
           'GET_CFP'               => 'GET_CFP()   (th->cfp)',
           'reg_cfp'               => 'reg_cfp     (th->cfp)',
@@ -829,7 +829,7 @@ class RubyVM
           'GET_PC'                => 'GET_SP()    (th->cfp->pc)',
           'TOPN'                  => "TOPN(x)     (*(th->cfp->sp - (x) - 1 ))",
           'NEXT_INSN'             => "NEXT_INSN() ",                    # Fallthrough to Return
-          'THROW_EXCEPTION'       => "THROW_EXCEPTION(x) val = x",      # Save arg to return value... 
+          'THROW_EXCEPTION'       => "THROW_EXCEPTION(x) val = x",      # Save arg to return value...
           'JUMP'                  => "JUMP(dst)   assert(0 && \"JUMP      in a callback is broken at the moment\")",
           'INSN_LABEL'            => "INSN_LABEL(lab)  LABEL_#{@name}_##lab",
           'REG_SP'                => "REG_SP (th->cfp->sp)",
@@ -843,8 +843,8 @@ class RubyVM
 
     # Return a map of macro -> argument
     def get_argument_map
-       # Map must jibe with defines. 
-       macros = { 
+       # Map must jibe with defines.
+       macros = {
           'CALL_SIMPLE_METHOD' => ['rb_thread_t* th',
                                    'CALL_INFO ci'],
           'GET_CFP'            => ['rb_thread_t* th'],
@@ -854,8 +854,8 @@ class RubyVM
 
 
 
-    def analyze_body_for_required_defines 
-       # Direct reference in body. 
+    def analyze_body_for_required_defines
+       # Direct reference in body.
        defines = get_define_map
        for i in defines.keys
           if /#{i}/.match(@body)
@@ -868,9 +868,9 @@ class RubyVM
     def analyze_body_for_non_macro_defines
        # Unfortunately, not all the defines we care about are nicely wrapped
        # up in macros. These are going to need special handling. We capture
-       # these in the below hash and processing. 
-       regex_define = { 
-          #"reg_cfp"     => "reg_cfp (th->cfp)",  
+       # these in the below hash and processing.
+       regex_define = {
+          #"reg_cfp"     => "reg_cfp (th->cfp)",
        }
 
        for k,v in regex_define
@@ -880,15 +880,15 @@ class RubyVM
        end
     end
 
-    def analyze_body_for_indirect_defines_and_args 
+    def analyze_body_for_indirect_defines_and_args
        defines   = get_define_map
        arguments = get_argument_map
 
-       # Some macros have perfectly valid definitons, 
+       # Some macros have perfectly valid definitons,
        # but reference other macros or arguments.
        #
-       # We map those out here. 
-       patterns = { 
+       # We map those out here.
+       patterns = {
           'GET_BLOCK_PTR'      => ['GET_CFP','reg_cfp'],
           'GET_BLOCK_HANDLER'  => ['GET_CFP','reg_cfp'],
           'GET_EP'             => ['GET_CFP','reg_cfp'],
@@ -900,21 +900,21 @@ class RubyVM
           'CALL_SIMPLE_METHOD' => ['GET_CFP','reg_cfp', 'RESTORE_REGS', 'NEXT_INSN'],
           'SET_SV'             => ["reg_sp"],
           'TOPN'               => ["reg_sp"],
-          'STACK_ADDR_FROM_TOP'=> ["reg_sp"], 
+          'STACK_ADDR_FROM_TOP'=> ["reg_sp"],
        }
 
        for direct_macro,macros in patterns
           if /#{direct_macro}/.match(@body)
 	     # puts "#{@insn} body matched /#{direct_macro}/..."
              # This can be a list
-             for indirect_macro in macros 
-                # Check if we need a macro definition.... 
+             for indirect_macro in macros
+                # Check if we need a macro definition....
                 if defines.key? indirect_macro
-                   @defines << [indirect_macro, defines[indirect_macro]]     
+                   @defines << [indirect_macro, defines[indirect_macro]]
                 end
                 # or a new argument.
                 if arguments.key? indirect_macro
-	           #puts "#{indirect_macro} body matched arguments -- injecting #{arguments[indirect_macro]} " 
+	           #puts "#{indirect_macro} body matched arguments -- injecting #{arguments[indirect_macro]} "
                    @arguments.unshift *(arguments[indirect_macro])
                 end
              end
@@ -922,24 +922,24 @@ class RubyVM
        end
     end
 
-    
 
-    # Updates the list of arguments for this JitCallback 
+
+    # Updates the list of arguments for this JitCallback
     def analyze_body_for_required_arguments
        macros = get_argument_map
 
        for i in macros.keys
           if /#{i}/.match(@body)
-	     # puts "direct match on #{i} in body -- injecting #{macros[i]} " 
+	     # puts "direct match on #{i} in body -- injecting #{macros[i]} "
              @arguments.unshift *(macros[i])
           end
        end
 
        # Unfortunately, not all the params we care about are nicely wrapped
        # up in macros. These are going to need special handling. We capture
-       # these in the below hash and processing. 
-    
-       regex_args = { 
+       # these in the below hash and processing.
+
+       regex_args = {
           "th,"     => ['rb_thread_t* th'],
           "th;"     => ['rb_thread_t* th'],
           "\\(th"     => ['rb_thread_t* th'],
@@ -948,18 +948,18 @@ class RubyVM
 
        for k,v in regex_args
           if /#{k}/.match(@body)
-	     # puts "#{k} body matched arguments -- injecting #{regex_args[k]} " 
-             @arguments.unshift *(regex_args[k])  
+	     # puts "#{k} body matched arguments -- injecting #{regex_args[k]} "
+             @arguments.unshift *(regex_args[k])
           end
        end
     end
 
-    # instruction demanded arguments like the operands and 
-    # pops. 
+    # instruction demanded arguments like the operands and
+    # pops.
     def analyze_args
        sum_args = @insn.opes + @insn.pops.reverse
-       sum_args.map! { |type,name| "#{type} #{name}" } 
-       # puts "appending #{sum_args} " 
+       sum_args.map! { |type,name| "#{type} #{name}" }
+       # puts "appending #{sum_args} "
        @arguments.concat(sum_args)
     end
 
@@ -967,11 +967,11 @@ class RubyVM
 
     def emit_undefines
        undefines = ''
-       for k,v in @defines 
+       for k,v in @defines
           undefines << "#undef #{k}\n"
        end
        return undefines
-    end 
+    end
 
     def emit_defines
        defines = ''
@@ -985,40 +985,52 @@ class RubyVM
 
     def emit_body
        out = ''
-       out << "/* Start of @body */\n" 
+       out << "/* Start of @body */\n"
        out << @body
        out << "/* end @body */\n"
     end
-  
-  end 
+
+  end
 
 
   ###################################################################
   # Support class for filtering out callbacks we don't quite understand
-  # yet. 
+  # yet.
 
   class JitGenerator < SourceCodeGenerator
 
-    # Return a container filled with extracts 
-    # from instructions that pass our tests. 
+    # Return a container filled with extracts
+    # from instructions that pass our tests.
     def generate_strings(container, extract)
+
+       blacklist = {
+          "getinstancevariable" => "Specializing in for the JIT to save a write",
+          "setinstancevariable" => "Specializing in for the JIT to save a write",
+       }
+
+
+
       @insns.each { |insn|
-        # If instructions with multiple stack returns are desired, special handling 
-        # will be required. For now, emmit a comment that says we haven't handled this. 
+        # If instructions with multiple stack returns are desired, special handling
+        # will be required. For now, emmit a comment that says we haven't handled this.
         if insn.rets.length  > 1
-           container << "/* Skipping instruction `#{insn.name}` due to muliple stack returns */\n" 
+           container << "/* Skipping instruction `#{insn.name}` due to muliple stack returns */\n"
         elsif insn.type == :optimized || insn.type == :unified
-           container << "/* Skipping instruction `#{insn.name}` as it's optimized, and will require special handling of opt/unified operands.  */\n" 
+           container << "/* Skipping instruction `#{insn.name}` as it's optimized, and will require special handling of opt/unified operands.  */\n"
         elsif has_elipsis insn
-           container << "/* Skipping instruction `#{insn.name}` has elipsis */\n" 
+           container << "/* Skipping instruction `#{insn.name}` has elipsis */\n"
         elsif (insn.rets.length == 0) && (has_throw_exception insn)
            container << "/* Skipping instruction `#{insn.name}`      "
            container << " *   Has THROW_EXCEPTION and no return... \n"
            container << " */\n"
-        else  
-           jc = JitCallback.new(insn) 
-           container << extract.call(jc) 
-        end 
+        elsif blacklist.key? insn.name
+           container << "/* Skipping instruction `#{insn.name}`      "
+           container << " *   #{blacklist[insn.name]} \n"
+           container << " */\n"
+        else
+           jc = JitCallback.new(insn)
+           container << extract.call(jc)
+        end
       }
 
       return container
@@ -1039,49 +1051,49 @@ class RubyVM
       return flat.empty? == false
     end
 
-    def flatten_arguments args 
+    def flatten_arguments args
       flat = args.map { |type,name| "#{type} #{name}" }
       return flat.join(", ")
     end
- 
+
   end
 
-  
+
   ###################################################################
   # vm_jit.inc
   #
-  # Emits a file suitable for including into one of the vm files, 
-  # producing a series of callback functions which can be consumed 
-  # by a JIT compiler. 
+  # Emits a file suitable for including into one of the vm files,
+  # producing a series of callback functions which can be consumed
+  # by a JIT compiler.
   #
-  # This process is reasonably complicated because instruction bodies 
+  # This process is reasonably complicated because instruction bodies
   # have a relatively large amount of VM state accssible. JIT functions will
   # either have to provide that kind of state in a manipulable form, or, we
-  # will have to hide that state. 
-  # 
-  # General Overview: 
-  # ================ 
+  # will have to hide that state.
+  #
+  # General Overview:
+  # ================
   #
   # Given an instruction foo
   #
   # DEFINE_INSN
-  # foo 
+  # foo
   # (VALUE flag)
   # (VALUE ary)
   # (VALUE obj)
   # {
-  #     obj = do_foo(ary, flag) 
+  #     obj = do_foo(ary, flag)
   #     MACRO_MAGIC(obj);
   # }
-  # 
+  #
   # This needs to parse the instruction, generating the correct return value,
-  # as well as setting up the enviornment for non-interpreter loop invocation. 
+  # as well as setting up the enviornment for non-interpreter loop invocation.
   #
   # This relies heavily on the class JitCallback
   class VmJitBodyGenerator < JitGenerator
     def generate
       vm_body = ''
-      vm_body = generate_strings(vm_body, lambda { |jc| jc.emit } )  
+      vm_body = generate_strings(vm_body, lambda { |jc| jc.emit } )
       vm_body << "\n"
       src = vpath.read('template/vm_jit.inc.tmpl')
       ERB.new(src).result(binding)
@@ -1100,7 +1112,7 @@ class RubyVM
   class VmJitHeaderGenerator < JitGenerator
     def generate
       callback_list = []
-      callback_list = generate_strings([], lambda { |jc| jc.emit_function_pointer } )  
+      callback_list = generate_strings([], lambda { |jc| jc.emit_function_pointer } )
       src = vpath.read('template/vm_jit_callbacks.inc.tmpl')
       ERB.new(src).result(binding)
     end
@@ -1134,12 +1146,12 @@ class RubyVM
 
   ###################################################################
   # vm_jit_initialize.inc
-  # 
+  #
   # Initialize jit structure with generated function addresses.
   class VmJitInitializationGenerator < JitGenerator
     def generate
       callback_list = []
-      callback_list = generate_strings([], lambda { |jc| jc.emit_initialization "jit->callbacks."} )  
+      callback_list = generate_strings([], lambda { |jc| jc.emit_initialization "jit->callbacks."} )
       src = vpath.read('template/vm_jit_initializations.inc.tmpl')
       ERB.new(src).result(binding)
     end

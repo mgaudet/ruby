@@ -147,15 +147,17 @@ vm_jit_init(rb_vm_t *vm, jit_globals_t globals)
 #ifdef OMR_RUBY_VALID_CLASS
     jit->callbacks.ruby_omr_is_valid_object_f                   = rb_omr_is_valid_object;
 #endif
-    jit->callbacks.rb_vm_env_write_f        = rb_vm_env_write; 
-    jit->callbacks.vm_jit_stack_check_f     = vm_jit_stack_check; 
-    jit->callbacks.rb_str_freeze_f          = rb_str_freeze; 
-    jit->callbacks.rb_ivar_set_f            = rb_ivar_set; 
-    jit->callbacks.vm_compute_case_dest_f   = vm_compute_case_dest; 
-    jit->callbacks.def_iseq_ptr_f           = def_iseq_ptr; 
+    jit->callbacks.rb_vm_env_write_f        = rb_vm_env_write;
+    jit->callbacks.vm_jit_stack_check_f     = vm_jit_stack_check;
+    jit->callbacks.rb_str_freeze_f          = rb_str_freeze;
+    jit->callbacks.rb_ivar_set_f            = rb_ivar_set;
+    jit->callbacks.vm_compute_case_dest_f   = vm_compute_case_dest;
+    jit->callbacks.def_iseq_ptr_f           = def_iseq_ptr;
+    jit->callbacks.vm_getinstancevariable_f = vm_getinstancevariable_jit;
+    jit->callbacks.vm_setinstancevariable_f = vm_setinstancevariable_jit;
 
-    verify_jit_callbacks(&jit->callbacks); 
-    
+    verify_jit_callbacks(&jit->callbacks);
+
     /* Initialize Globals */
     jit->globals = globals;
 
