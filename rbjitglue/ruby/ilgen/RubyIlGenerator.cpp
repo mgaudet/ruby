@@ -93,10 +93,13 @@ RubyIlGenerator::RubyIlGenerator(TR::IlGeneratorMethodDetails &details,
       }
 
    _epSymRef         = symRefTab.createRubyNamedShadowSymRef("ep",        TR::Address,            TR_RubyFE::SLOTSIZE, offsetof(rb_control_frame_t, ep),   true);
-   _cfpSymRef        = symRefTab.createRubyNamedShadowSymRef("cfp",       TR::Address,            TR_RubyFE::SLOTSIZE, offsetof(rb_thread_t, cfp),         false);
+
+   // TODO: Because the inline frame setup helper is in the set of helpers, we conservatively alias cfp against all helpers.
+   //       Correct fix would be to alias against inline frame helper only, as it's the only one I'm aware that an impact the cfp value. 
+   _cfpSymRef        = symRefTab.createRubyNamedShadowSymRef("cfp",       TR::Address,            TR_RubyFE::SLOTSIZE, offsetof(rb_thread_t, cfp),         true);
    _spSymRef         = symRefTab.createRubyNamedShadowSymRef("sp",        TR::Address,            TR_RubyFE::SLOTSIZE, offsetof(rb_control_frame_t, sp),   true);
-   
-   // Disabled for 2.4 until cfp flag code can be rectified. 
+
+   // Disabled for 2.4 until cfp flag code can be rectified.
    // _flagSymRef       = symRefTab.createRubyNamedShadowSymRef("flag",      TR::Address,            TR_RubyFE::SLOTSIZE, offsetof(rb_control_frame_t, flag), true);
 
 
@@ -105,10 +108,7 @@ RubyIlGenerator::RubyIlGenerator(TR::IlGeneratorMethodDetails &details,
    _selfSymRef       = symRefTab.createRubyNamedShadowSymRef("self",      TR_RubyFE::slotType(),    TR_RubyFE::SLOTSIZE, offsetof(rb_control_frame_t, self), false);
    _icSerialSymRef   = symRefTab.createRubyNamedShadowSymRef("ic_serial", TR_RubyFE::slotType(),    TR_RubyFE::SLOTSIZE, offsetof(struct iseq_inline_cache_entry, ic_serial),        false);
    _icValueSymRef    = symRefTab.createRubyNamedShadowSymRef("ic_value",  TR_RubyFE::slotType(),    TR_RubyFE::SLOTSIZE, offsetof(struct iseq_inline_cache_entry, ic_value.value),   false);
-   _icCrefSymRef     = symRefTab.createRubyNamedShadowSymRef("ic_cref",   TR::Address,              sizeof(void*),       offsetof(struct iseq_inline_cache_entry, ic_cref), false);                    
-
-   // _rb_iseq_struct_selfSymRef =
-   //                    symRefTab.createRubyNamedShadowSymRef("rb_iseq_struct->self",      TR_RubyFE::slotType(),  TR_RubyFE::SLOTSIZE, offsetof(rb_iseq_struct, self),     false);  //self in rb_iseq_struct does not change across calls.
+   _icCrefSymRef     = symRefTab.createRubyNamedShadowSymRef("ic_cref",   TR::Address,              sizeof(void*),       offsetof(struct iseq_inline_cache_entry, ic_cref), false);
    _iseqSymRef       = symRefTab.createRubyNamedShadowSymRef("iseq",                      TR::Address,           TR_RubyFE::SLOTSIZE, offsetof(rb_control_frame_t, iseq), true);
 
    static_assert(sizeof(*fe->getJitInterface()->globals.ruby_vm_global_constant_state_ptr) == TR_RubyFE::SLOTSIZE,
@@ -238,7 +238,7 @@ RubyIlGenerator::getVMExec(TR::Block * insertBlock)
  * Generate a call to vm_exec_core, and return of its return.
  *
  * Unsets the VM_FRAME_FLAG_JITTED flag on the CFP before returning to the
- * interpreter, for RAS purposes.
+ * interpreter
  *
  * @returns the passed in, modified block.
  *
@@ -249,7 +249,6 @@ TR::Block *
 RubyIlGenerator::createVMExec(TR::Block * block)
    {
 #if 0 // This doesn't work yet for Ruby 2.4. 
-         // Side effect of disablement is purely RAS impact. 
    auto flag_xor = storeCFPFlag(TR::Node::xxor(
                                    TR::Node::xconst(VM_FRAME_FLAG_JITTED),
                                    loadCFPFlag()));
