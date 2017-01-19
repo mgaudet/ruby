@@ -3161,7 +3161,7 @@ VALUE vm_send_woblock_inlineable_guard(rb_serial_t method_state, rb_serial_t cla
    VALUE klass = CLASS_OF(recv);
    ret = (GET_GLOBAL_METHOD_STATE() == method_state && RCLASS_SERIAL(klass) == class_serial);
 #if VM_CHECK_MODE >= 1
-   ret = ret && !getenv("FAIL_GUARD")
+   ret = ret && !getenv("FAIL_GUARD");
    if (getenv("TRACE_GUARD")) {
       if (atoi(getenv("TRACE_GUARD")) > 1 || 
           !ret) {
