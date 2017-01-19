@@ -354,12 +354,13 @@ Ruby::InlinerUtil::calleeTreeTopPreMergeActions(TR::ResolvedMethodSymbol *callee
    TR::SymbolReference* receiverTempSymRef = comp()->getSymRefTab()->getRubyInlinedReceiverTempSymRef(callSite);
    TR_ASSERT(receiverTempSymRef != NULL, "NULL receiverTempSymRef, findCallSiteTarget didn't store receiver to a temporary.");
 
-   TR::TreeTop* vm_frame_setup_call_TT = genCall(comp(), RubyHelper_vm_send_woblock_jit_inline_frame, callOpCode, 5,
+   TR::TreeTop* vm_frame_setup_call_TT = genCall(comp(), RubyHelper_vm_send_woblock_jit_inline_frame, callOpCode, 6,
                                                  TR::Node::createLoad(threadSymRef),
                                                  TR::Node::aconst((uintptr_t)ci), //Can we just anchor and recycle the above child nodes? or different blocks?
                                                  TR::Node::aconst((uintptr_t)cc),
                                                  TR::Node::aconst((uintptr_t)iseq),
-                                                 TR::Node::createLoad(receiverTempSymRef)
+                                                 TR::Node::createLoad(receiverTempSymRef),
+                                                 TR::Node::aconst((uintptr_t)cc->me)
                                                 );
 
    startOfInlinedCall->insertBefore(vm_frame_setup_call_TT);

@@ -76,7 +76,7 @@ struct jit_callbacks_struct {
    void                 (*rb_bug_f)                     (const char *, ...);
    VALUE                (*vm_exec_core_f)               (rb_thread_t *th, VALUE initial);
    const char *         (*rb_class2name_f)              (VALUE klass); 
-   void                 (*vm_send_woblock_jit_inline_frame_f)(rb_thread_t *th, CALL_INFO ci, CALL_CACHE cc, const rb_iseq_t* iseq, VALUE recv);
+   void                 (*vm_send_woblock_jit_inline_frame_f)(rb_thread_t *th, CALL_INFO ci, CALL_CACHE cc, const rb_iseq_t* iseq, VALUE recv, const rb_callable_method_entry_t *me);
    VALUE                (*vm_send_woblock_inlineable_guard_f)(rb_serial_t method_state, rb_serial_t class_serial, VALUE klass);
    void                 (*rb_threadptr_execute_interrupts_f) (rb_thread_t *th, int blocking_timing);
 #ifdef OMR_RUBY_VALID_CLASS
