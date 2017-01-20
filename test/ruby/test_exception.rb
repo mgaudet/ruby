@@ -572,6 +572,7 @@ end.join
   end
 
   def test_stackoverflow
+    skip if RubyVM::JIT::exists?
     feature6216 = '[ruby-core:43794] [Feature #6216]'
     e = assert_raise(SystemStackError, feature6216) {m}
     level = e.backtrace.size
