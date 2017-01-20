@@ -3111,10 +3111,17 @@ vm_compute_case_dest(CDHASH hash, OFFSET else_offset, VALUE key)
  * inlined body!
  */
 static inline VALUE
-vm_call_iseq_setup_inliner(rb_thread_t *th, rb_control_frame_t *cfp, struct rb_calling_info *calling, const struct rb_call_info *ci, struct rb_call_cache *cc, const rb_iseq_t* iseq,
-			  int opt_pc, int param_size, int local_size)
+vm_call_iseq_setup_inliner(rb_thread_t *th,
+                           rb_control_frame_t *cfp,
+                           struct rb_calling_info *calling,
+                           const struct rb_call_info *ci,
+                           struct rb_call_cache *cc,
+                           const rb_callable_method_entry_t *me,
+                           const rb_iseq_t* iseq,
+                           int opt_pc,
+                           int param_size,
+                           int local_size)
 {
-    const rb_callable_method_entry_t *me = cc->me;
     VALUE *argv = cfp->sp - calling->argc;
     VALUE *sp = argv + param_size;
     cfp->sp = argv - 1 /* recv */;
@@ -3129,7 +3136,7 @@ vm_call_iseq_setup_inliner(rb_thread_t *th, rb_control_frame_t *cfp, struct rb_c
 
 
 static void
-vm_send_woblock_jit_inline_frame(rb_thread_t *th, CALL_INFO ci, CALL_CACHE cc, const rb_iseq_t* iseq, VALUE recv)
+vm_send_woblock_jit_inline_frame(rb_thread_t *th, CALL_INFO ci, CALL_CACHE cc, const rb_iseq_t* iseq, VALUE recv, const rb_callable_method_entry_t *me)
 {
    const int param_size = iseq->body->param.size;
    const int local_size = iseq->body->local_table_size;
@@ -3148,6 +3155,7 @@ vm_send_woblock_jit_inline_frame(rb_thread_t *th, CALL_INFO ci, CALL_CACHE cc, c
                               &calling,
                               ci,
                               cc,
+                              me,
                               iseq,
                               0, /* opt_pc: This needs to change if the inlined iseq !simple_iseq_p */
                               param_size,
@@ -3161,7 +3169,7 @@ VALUE vm_send_woblock_inlineable_guard(rb_serial_t method_state, rb_serial_t cla
    VALUE klass = CLASS_OF(recv);
    ret = (GET_GLOBAL_METHOD_STATE() == method_state && RCLASS_SERIAL(klass) == class_serial);
 #if VM_CHECK_MODE >= 1
-   ret = ret && !getenv("FAIL_GUARD")
+   ret = ret && !getenv("FAIL_GUARD");
    if (getenv("TRACE_GUARD")) {
       if (atoi(getenv("TRACE_GUARD")) > 1 || 
           !ret) {
