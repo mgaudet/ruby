@@ -55,8 +55,8 @@ vm_jit_init(rb_vm_t *vm, jit_globals_t globals)
 
     if (!handle) {
 	error = dlerror();
-	fprintf(stderr, "vm_jit_init: unable to load %s: %s\n", dll_name, error);
-	goto load_problem;
+	fprintf(stderr, "[FATAL] vm_jit_init: unable to load %s: %s\n", dll_name, error);
+	exit(EXIT_FAILURE);
     }
 
     jit = ruby_mimmalloc(sizeof(*jit)); /* FIXME: mimmalloc or ALLOC? */
