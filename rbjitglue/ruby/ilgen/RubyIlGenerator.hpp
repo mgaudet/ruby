@@ -183,6 +183,7 @@ class RubyIlGenerator : public TR_IlGenerator, public TR_RubyByteCodeIteratorWit
 
    virtual int32_t currentByteCodeIndex() { return bcIndex(); }
    virtual TR::Block *getCurrentBlock()    { return _block; }
+   virtual TR::ResolvedMethodSymbol *methodSymbol() const { return _methodSymbol;}
 
    private:
 
