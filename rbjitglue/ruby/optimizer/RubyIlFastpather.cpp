@@ -55,7 +55,7 @@ char* getBOPName(int32_t bop)
    }
 
 Ruby::IlFastpather::IlFastpather(TR::OptimizationManager *manager)
-   : TR::Optimization(manager) 
+   : TR::Optimization(manager)
    {
 
    //Initialize VMEventFlag SymRef.
@@ -108,127 +108,214 @@ Ruby::IlFastpather::IlFastpather(TR::OptimizationManager *manager)
    }
 
 
-/** 
+/**
  * Extract some of the semantics of ruby calls into trees, providing a
- * fast-path version. 
+ * fast-path version.
  *
- * Executes on a treetop basis. 
- * 
- */ 
+ * Executes on a treetop basis.
+ *
+ */
 int32_t
-Ruby::IlFastpather::perform() 
+Ruby::IlFastpather::perform()
    {
    if (trace())
       traceMsg(comp(), OPT_DETAILS "Processing method: %s\n", comp()->signature());
 
-   // Currently a block is marked cold by this pass when created 
-   // as a way of avoiding reprocessing generated call blocks. 
+   // Currently a block is marked cold by this pass when created
+   // as a way of avoiding reprocessing generated call blocks.
    //
-   // FIXME: given that we'd really like to be flexible about 
-   // where/when this optimization runs, a side table tracking 
-   // block status should be preferred. 
+   // FIXME: given that we'd really like to be flexible about
+   // where/when this optimization runs, a side table tracking
+   // block status should be preferred.
    auto lastTT = cfg()->findLastTreeTop();
    for (auto tt = comp()->getMethodSymbol()->getFirstTreeTop();
         tt != lastTT;
         tt = tt->getNextTreeTop())
       {
       if (!tt->getEnclosingBlock()->isCold())
-      performOnTreeTop(tt); 
+      performOnTreeTop(tt);
       }
 
    return 0;
-   } 
+   }
 
 /**
- * Transform a tree top. 
+ * Transform a tree top.
  */
 void
-Ruby::IlFastpather::performOnTreeTop(TR::TreeTop* tt) 
+Ruby::IlFastpather::performOnTreeTop(TR::TreeTop* tt)
    {
-   auto *node = tt->getNode(); 
-   if (node->getOpCodeValue() == TR::treetop) 
-      node = node->getFirstChild(); 
-   
-   if (node->getOpCode().isCall() && 
+   auto *node = tt->getNode();
+   if (node->getOpCodeValue() == TR::treetop)
+      node = node->getFirstChild();
+
+   if (node->getOpCode().isCall() &&
           node->getSymbol()->castToMethodSymbol()->isHelper())
       {
       auto refNum = node->getSymbolReference()->getReferenceNumber();
       switch (refNum)
          {
-         case RubyHelper_vm_trace: 
-            fastpathTrace(tt, node); 
+         case RubyHelper_vm_trace:
+            fastpathTrace(tt, node);
+            break;
+         case RubyHelper_vm_getinstancevariable:
+            fastpathGetInstanceVariable(tt, node); 
             break; 
-
          // case RubyHelper_vm_opt_plus:
          // case RubyHelper_vm_opt_minus:
-         //    fastpathPlusMinus(tt, node, refNum == RubyHelper_vm_opt_plus ); 
-            break;
+         //    fastpathPlusMinus(tt, node, refNum == RubyHelper_vm_opt_plus );
+         // break;
          default:
-            return; 
+            return;
          }
-
       }
-
    }
 
 /**
- * Create a treetop for node, store to a temp, and insert before the passed 
- * treetop.  
- * 
- * \return Symbol reference of the temp. 
+ * Create a treetop for node, store to a temp, and insert before the passed
+ * treetop.
+ *
+ * \return Symbol reference of the temp.
  */
-TR::SymbolReference * 
+TR::SymbolReference *
 Ruby::IlFastpather::storeToTempBefore(TR::Node *node, TR::TreeTop *tt)
    {
    TR::SymbolReference *tempSymRef = comp()->getSymRefTab()->createTemporary(comp()->getMethodSymbol(), node->getDataType());
    tt->insertBefore(TR::TreeTop::create(comp(), TR::Node::createStore(tempSymRef, node)));
-   return tempSymRef; 
+   return tempSymRef;
+   }
+
+/**
+ * getinstancevariable_jit(VALUE obj, ID id, IC ic)
+ *
+ * The fast path boils down to 
+ *
+ *    if (LIKELY(RB_TYPE_P(obj, T_OBJECT))) {
+ *	VALUE val = Qundef;
+ *	if (LIKELY(ic->ic_serial == RCLASS_SERIAL(RBASIC(obj)->klass))) {
+ *	    st_index_t index =  ic->ic_value.index;
+ *	    if (LIKELY(index < ROBJECT_NUMIV(obj))) {
+ *		val = ROBJECT_IVPTR(obj)[index];
+ *	    }
+ *	  undef_check:
+ *	    if (UNLIKELY(val == Qundef)) {
+ *		if (!is_attr && RTEST(ruby_verbose))
+ *		    rb_warning("instance variable %"PRIsVALUE" not initialized", QUOTE_ID(id));
+ *		val = Qnil;
+ *	    }
+ *	    return val;
+ *	}
+ *    }
+ *
+ * Plan:
+ * 
+ *  Fast path above: if Undef, then fall back to slow path for undef warning.  
+ *
+ *  Let's expand some macros.
+ *
+ *    if (!(RB_SPECIAL_CONST_P(obj)) && RB_BUILTIN_TYPE(ob) == T_OBJECT)) {
+ *	VALUE val = Qundef;
+ *	if (ic->ic_serial == RCLASS_SERIAL(RBASIC(obj)->klass)) {
+ *	    st_index_t index =  ic->ic_value.index;
+ *	    if (LIKELY(index < ROBJECT_NUMIV(obj))) {
+ *		val = ROBJECT_IVPTR(obj)[index];
+ *	    }
+ *       }
+ *    }
+ *
+ *
+ *
+ */
+void
+Ruby::IlFastpather::fastpathGetInstanceVariable(TR::TreeTop *tt, TR::Node *node)
+   {
+
+
    }
 
 
 
 /**
- * Fastpath calls to vm_trace. 
+ * RB_TEST(v) !( ((VALUE)(v) & (VALUE)~RUBY_Qnil) == 0 )
+ */
+TR::Node*
+Ruby::IlFastpather::genRB_TEST_P(TR::Node* v)
+   {
+   // Note: this is only correct today for a 64 bit JIT.
+   static_assert(sizeof(VALUE) == 8, "Not yet prepared for a 32 bit JIT!");
+   return TR::Node::create(TR::lcmpne, 2,
+                           TR::Node::create(TR::land, 2,
+                                            v,
+                                            TR::Node::lconst((uintptr_t)~RUBY_Qnil)),
+                           TR::Node::lconst(0));
+   }
+
+
+/**
+ * RB_IMMEDIATE_P(x) ((VALUE)(x) & RUBY_IMMEDIATE_MASK)
+ */
+TR::Node*
+Ruby::IlFastpather::genRB_IMMEDIATE_P(TR::Node* x)
+   {
+   return TR::Node::create(TR::land, 2, x, TR::Node::lconst((uintptr_t) RUBY_IMMEDIATE_MASK));
+   }
+
+
+/**
+ * RB_SPECIAL_CONST_P(x) (RB_IMMEDIATE_P(x) || !RB_TEST(x))
+ */
+TR::Node*
+Ruby::IlFastpather::genRB_SPECIAL_CONST_P(TR::Node* obj)
+   {
+   return TR::Node::create(TR::iand, 2,
+                           genRB_IMMEDIATE_P(obj),
+                           TR::Node::create(TR::ineg, 1, genRB_TEST_P(obj))); 
+   }
+
+
+
+/**
+ * Fastpath calls to vm_trace.
  *
- * We can fastpath calls to VM trace by checking first the ruby_vm_event_flag. 
+ * We can fastpath calls to VM trace by checking first the ruby_vm_event_flag.
  *
  * @TODO: It would be ideal if we were able to also move the PC store, and any
- * 'pending push' stores, that preceed this call beneath the branch as well. 
+ * 'pending push' stores, that preceed this call beneath the branch as well.
  */
 void
-Ruby::IlFastpather::fastpathTrace(TR::TreeTop *tt, TR::Node *node) 
+Ruby::IlFastpather::fastpathTrace(TR::TreeTop *tt, TR::Node *node)
    {
-   TR_ASSERT(node && tt, "Must have node and treetop passed in"); 
+   TR_ASSERT(node && tt, "Must have node and treetop passed in");
    TR_ASSERT(node->getNumChildren() == 2, "Wrong arg count on vm_trace call");
 
-   auto containing_block = tt->getEnclosingBlock(); 
+   auto containing_block = tt->getEnclosingBlock();
 
    if (!performTransformation(comp(), "%s Fastpathing %s on TT %p (%p)\n", OPT_DETAILS, "vm_trace", tt, node))
-      return; 
+      return;
 
    //Anchor and store out children so we can reference across control flow
    auto thread  = node->getChild(0);
    auto flag    = node->getChild(1);
-   TR_ASSERT(thread  && flag, "null child..." ); 
+   TR_ASSERT(thread  && flag, "null child..." );
 
    TR::SymbolReference *tempThread = storeToTempBefore(thread,  tt);
    TR::SymbolReference *tempFlag   = storeToTempBefore(flag,    tt);
 
    //create test
    auto test             = genTraceTest(flag);
-   auto test_tt          = TR::TreeTop::create(comp(), test); 
+   auto test_tt          = TR::TreeTop::create(comp(), test);
 
-   //Create new call node for if branch, loading from temps. 
+   //Create new call node for if branch, loading from temps.
    auto new_call_node = TR::Node::create(node->getOpCodeValue(), node->getNumChildren());
-   new_call_node->setSymbolReference(node->getSymbolReference()); 
-   new_call_node->setAndIncChild(0, TR::Node::createLoad(tempThread)); 
-   new_call_node->setAndIncChild(1, TR::Node::createLoad(tempFlag)); 
+   new_call_node->setSymbolReference(node->getSymbolReference());
+   new_call_node->setAndIncChild(0, TR::Node::createLoad(tempThread));
+   new_call_node->setAndIncChild(1, TR::Node::createLoad(tempFlag));
 
-   //New call, treetopped. 
-   auto new_call = TR::TreeTop::create(comp(), TR::Node::create(TR::treetop, 1, new_call_node) ) ; 
+   //New call, treetopped.
+   auto new_call = TR::TreeTop::create(comp(), TR::Node::create(TR::treetop, 1, new_call_node) ) ;
 
    containing_block->createConditionalBlocksBeforeTree(tt, test_tt, new_call, NULL, cfg(), true, true);
-   
+
    }
 
 /**
@@ -242,7 +329,7 @@ Ruby::IlFastpather::fastpathPlusMinus(TR::TreeTop *tt, TR::Node *node, bool isPl
    auto* block = tt->getEnclosingBlock();
 
    if (!performTransformation(comp(), "%s Fastpathing %s on TT %p\n", OPT_DETAILS, isPlus ? "plus" : "minus", tt))
-      return; 
+      return;
 
    TR::Block *Bfast, *Bslow, *Btail;
    CS2::ArrayOf<TR::Block *, TR::Allocator> intermediateBlocks(comp()->allocator());
@@ -257,7 +344,7 @@ Ruby::IlFastpather::fastpathPlusMinus(TR::TreeTop *tt, TR::Node *node, bool isPl
    TR::Node::anchorBefore(ciConst, tt);
    TR::Node::anchorBefore(a,       tt);
    TR::Node::anchorBefore(b,       tt);
-   
+
    createMultiDiamond(tt, block, 3, Bfast, Bslow, Btail, intermediateBlocks);
 
    TR::Block *B1 = intermediateBlocks[0];
@@ -343,7 +430,7 @@ Ruby::IlFastpather::fastpathPlusMinus(TR::TreeTop *tt, TR::Node *node, bool isPl
    gotoNode->setBranchDestination(Btail->getEntry());
 
    // Now change the original call node in Btail to be a load
-   node = TR::Node::recreate(node,  
+   node = TR::Node::recreate(node,
       TR::Node::xloadOp(static_cast<TR_RubyFE*>(TR::comp()->fe())));
 
    node->setSymbolReference(tempResult);
@@ -354,7 +441,7 @@ Ruby::IlFastpather::fastpathPlusMinus(TR::TreeTop *tt, TR::Node *node, bool isPl
    // comp()->verifyBlocks();
    // comp()->verifyCFG();
 #else
-   TR_ASSERT_FATAL(false, "Fastpathing is disabled because of 2.2-2.4 changes"); 
+   TR_ASSERT_FATAL(false, "Fastpathing is disabled because of 2.2-2.4 changes");
 #endif
    }
 
@@ -365,9 +452,9 @@ Ruby::IlFastpather::fastpathPlusMinus(TR::TreeTop *tt, TR::Node *node, bool isPl
  *       .. head ..
  *       splitTT
  *       .. tail ..
- * 
+ *
  * Is converted to:
- * 
+ *
  *     B:
  *       .. head ..
  *     intermediateBlock1:   -> Bslow
@@ -379,18 +466,18 @@ Ruby::IlFastpather::fastpathPlusMinus(TR::TreeTop *tt, TR::Node *node, bool isPl
  *       splitTT
  *       .. tail ..
  *     -----------------------
- *     <remainder of code>     
+ *     <remainder of code>
  *     -----------------------
  *     Bslow:
  *       goto Btail
- * 
- * 
+ *
+ *
  * Additionally:
  * * we add CFG edges from B & intermediateBlocks to Bslow
  * * we add CFG edges for fall through from B through Btail
  * * we mark the intermidateBlocks and Bfast as extenensions of the previous block
  * * we add a CFG edge from Bslow back to Btail
- * 
+ *
  * It is up to the caller to
  * * add the iftrees in each of the B and intermediate blocks
  * * to change 'splitTT' to a load of temp
@@ -446,15 +533,15 @@ Ruby::IlFastpather::createMultiDiamond(TR::TreeTop *splitTT,
    //comp()->dumpMethodTrees("after createMultiDiamond");
    }
 
-// Not currently used. 
+// Not currently used.
 void
 Ruby::IlFastpather::fastpathGE(TR::TreeTop *tt, TR::Node *origif)
    {
-#if 0 
+#if 0
    auto* block = tt->getEnclosingBlock();
 
    if (!performTransformation(comp(), "%s Fastpathing %s on TT %p\n", OPT_DETAILS, "GE", tt))
-      return; 
+      return;
 
    auto call = origif->getFirstChild()->getFirstChild();
    auto a    = call->getChild(2);
@@ -532,9 +619,9 @@ Ruby::IlFastpather::fastpathGE(TR::TreeTop *tt, TR::Node *origif)
    TR::Node::genTreeTop(gotoNode, Bgoto);
    gotoNode->setBranchDestination(Bfallth->getEntry());
 
-   return; 
-#else 
-   TR_ASSERT_FATAL(false, "Fastpathing disabled for 2.2-2.4 changes"); 
+   return;
+#else
+   TR_ASSERT_FATAL(false, "Fastpathing disabled for 2.2-2.4 changes");
    return;
 #endif
    }
@@ -542,18 +629,18 @@ Ruby::IlFastpather::fastpathGE(TR::TreeTop *tt, TR::Node *origif)
 /**
  * Generate branch that checks flags
  *
- * if (UNLIKELY(ruby_vm_event_flags & (flag_))) 
+ * if (UNLIKELY(ruby_vm_event_flags & (flag_)))
  *
- * @TODO: Need to ensure the datatype lenth is correct 
- *        Currently, assuming TR::Int64, which is the slot size. 
- *        However, if the slot size != sizeof(unsigned long), this code 
+ * @TODO: Need to ensure the datatype lenth is correct
+ *        Currently, assuming TR::Int64, which is the slot size.
+ *        However, if the slot size != sizeof(unsigned long), this code
  *        won't be correct.
  */
-TR::Node * 
-Ruby::IlFastpather::genTraceTest(TR::Node * flag) 
+TR::Node *
+Ruby::IlFastpather::genTraceTest(TR::Node * flag)
    {
    auto flagSymref   = comp()->getSymRefTab()->findRubyVMEventFlagsSymbolRef();
-   auto loadNode     = TR::Node::createLoad(flagSymref); 
+   auto loadNode     = TR::Node::createLoad(flagSymref);
    return TR::Node::createif(TR::ificmpne,
             TR::Node::create(TR::iand, 2, loadNode, flag),
             TR::Node::iconst(0));
@@ -581,8 +668,8 @@ Ruby::IlFastpather::genRedefinedTest(int32_t op, int32_t mask, TR::TreeTop *dest
                           dest);
    }
 
-//MG: need access to redefined symrefs, with aliasing correclty set. 
-//    Hmm. 
+//MG: need access to redefined symrefs, with aliasing correclty set.
+//    Hmm.
 TR::Node *
 Ruby::IlFastpather::loadBOPRedefined(int32_t bop)
    {
@@ -612,7 +699,7 @@ Ruby::IlFastpather::getCompareOp(TR::Node *origif)
    auto sr = call->getSymbolReference()->getReferenceNumber();
 
    // ifxcmpeq means that it was was a branchunless
-   bool reverseBranch = (origif->getOpCode().isCompareTrueIfEqual()); 
+   bool reverseBranch = (origif->getOpCode().isCompareTrueIfEqual());
 
    TR::ILOpCodes op = TR::BadILOp;
    if (sr == RubyHelper_vm_opt_eq)  op = TR::iflcmpeq;

@@ -31,49 +31,55 @@ namespace Ruby
 {
 /**
  * Optimization class that modifies IL to fastpath operations from
- * the ruby VM implementation. 
+ * the ruby VM implementation.
  *
- * This optimization must be kept up to date with the RubyVM. 
+ * This optimization must be kept up to date with the RubyVM.
  */
 class IlFastpather : public TR::Optimization
    {
    public:
 
-   IlFastpather(TR::OptimizationManager * manager); 
+   IlFastpather(TR::OptimizationManager * manager);
 
    /**
     * Optimization factory method
     */
-   static TR::Optimization *create(TR::OptimizationManager *manager) 
+   static TR::Optimization *create(TR::OptimizationManager *manager)
       {
-      return new (manager->allocator()) IlFastpather(manager); 
+      return new (manager->allocator()) IlFastpather(manager);
       }
 
-   TR::CFG * cfg() { return comp()->getFlowGraph(); } 
+   TR::CFG * cfg() { return comp()->getFlowGraph(); }
 
-   virtual int32_t      perform(); 
-   virtual bool         shouldPerform() { 
-      static auto * disableFastPath= feGetEnv("OMR_DISABLE_FASTPATH"); 
-      return !disableFastPath; 
-   } 
+   virtual int32_t      perform();
+   virtual bool         shouldPerform() {
+      static auto * disableFastPath= feGetEnv("OMR_DISABLE_FASTPATH");
+      return !disableFastPath;
+   }
 
-   private: 
+   private:
 
-   void performOnTreeTop(TR::TreeTop *); 
-   void fastpathTrace   (TR::TreeTop *, TR::Node *); 
+   void performOnTreeTop(TR::TreeTop *);
+   void fastpathTrace   (TR::TreeTop *, TR::Node *);
+   void fastpathGetInstanceVariable(TR::TreeTop*, TR::Node*);
 
    //Fast Pathing
    TR::Node *genFixNumTest(TR::Node *);
    TR::Node *genRedefinedTest(int32_t, int32_t, TR::TreeTop *);
    TR::Node *genTraceTest(TR::Node * flag);
 
-   TR::TreeTop * genTreeTop(TR::Node*, TR::Block*); 
+   TR::Node *genRB_TEST_P(TR::Node*);
+   TR::Node *genRB_IMMEDIATE_P(TR::Node*);
+   TR::Node *genRB_SPECIAL_CONST_P(TR::Node*);
+
+
+   TR::TreeTop * genTreeTop(TR::Node*, TR::Block*);
 
    void fastpathPlusMinus(TR::TreeTop *, TR::Node *,  bool);
    void fastpathGE       (TR::TreeTop *, TR::Node *);
 
    // There is also an implementation of this function inside the pythonFE
-   // that uses STL containers. We ought to common with that version. 
+   // that uses STL containers. We ought to common with that version.
    void createMultiDiamond(TR::TreeTop *, TR::Block *, uint32_t,
                            TR::Block *&, TR::Block *&, TR::Block *&,
                            CS2::ArrayOf<TR::Block *, TR::Allocator> &);
