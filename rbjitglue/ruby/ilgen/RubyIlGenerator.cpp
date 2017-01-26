@@ -1057,12 +1057,10 @@ RubyIlGenerator::setlocal(lindex_t idx, rb_num_t level)
 TR::Node *
 RubyIlGenerator::getinstancevariable(VALUE id, VALUE ic)
    {
-   return genCall(RubyHelper_vm_getivar, TR::Node::xcallOp(), 5,
+   return genCall(RubyHelper_vm_getinstancevariable, TR::Node::xcallOp(), 3,
                   loadSelf(),
                   TR::Node::xconst(id),
-                  TR::Node::xconst(ic),
-                  TR::Node::aconst(0), /* ci */
-                  TR::Node::xconst(0)); /* is_attr */
+                  TR::Node::xconst(ic));
    }
 
 TR::Node *
@@ -1117,13 +1115,11 @@ TR::Node *
 RubyIlGenerator::setinstancevariable(VALUE id, VALUE ic)
    {
    auto value = pop();
-   return genCall(RubyHelper_vm_setivar, TR::Node::xcallOp(), 6,
+   return genCall(RubyHelper_vm_setinstancevariable, TR::Node::xcallOp(), 4,
                   loadSelf(),
                   TR::Node::xconst(id),
                   value,
-                  TR::Node::xconst(ic),
-                  TR::Node::aconst(0), /* ci */
-                  TR::Node::xconst(0)); /* is_attr */
+                  TR::Node::xconst(ic));
    }
 
 TR::Node *

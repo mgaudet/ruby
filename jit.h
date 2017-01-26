@@ -88,7 +88,8 @@ struct jit_callbacks_struct {
     VALUE               (*rb_ivar_set_f)                (VALUE, ID, VALUE);
     OFFSET              (*vm_compute_case_dest_f)       (CDHASH,OFFSET,VALUE);  
     const rb_iseq_t *   (*def_iseq_ptr_f)               (rb_method_definition_t *def);
-
+    VALUE               (*vm_getinstancevariable_f)     (VALUE obj, ID id, IC ic);
+    void                (*vm_setinstancevariable_f)     (VALUE obj, ID id, VALUE val, IC ic);
 };
 
 typedef struct jit_callbacks_struct jit_callbacks_t;
