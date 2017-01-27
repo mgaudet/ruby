@@ -918,7 +918,9 @@ RubyIlGenerator::indexedWalker(int32_t startIndex, int32_t& firstIndex, int32_t&
          case BIN(putiseq):                     push(putiseq((ISEQ)getOperand(1))); _bcIndex += len; break;
 
          case BIN(freezestring): push(freezestring((VALUE)getOperand(1))); _bcIndex += len; break; 
-         // BIN(reverse)
+         case BIN(reverse): reverse((rb_num_t)getOperand(1)); _bcIndex += len; break;
+
+
          // BIN(checkkeyword)
          // BIN(defineclass)
          // BIN(opt_str_freeze)
@@ -2393,6 +2395,20 @@ RubyIlGenerator::loadEP(rb_num_t level)
       ep = loadPrevEP(ep);
       }
    return ep;
+   }
+
+TR::Node* 
+RubyIlGenerator::reverse(rb_num_t n)
+   {
+   for (auto i = 0; i < n / 2; i++)
+      {
+      auto sp_index     = i - n;  
+      auto v0           = topn(sp_index);
+      auto v1           = topn(i);
+      topn(sp_index)    = v1;
+      topn(i)           = v0;  
+      }
+
    }
 
 TR::Node *

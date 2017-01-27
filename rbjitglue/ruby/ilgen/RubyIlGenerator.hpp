@@ -310,6 +310,7 @@ class RubyIlGenerator : public TR_IlGenerator, public TR_RubyByteCodeIteratorWit
    TR::Node *defined       (rb_num_t op_type, VALUE obj, VALUE needstr);
    TR::Node *aref_with     (CALL_INFO, CALL_CACHE, VALUE);
    TR::Node *aset_with     (CALL_INFO, CALL_CACHE, VALUE);
+   TR::Node *reverse       (rb_num_t n); 
    void       trace        (rb_num_t nf);
 
    // Control flow
