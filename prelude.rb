@@ -16,6 +16,21 @@ class Thread
   end
 end
 
+
+class Array
+
+   def each
+      size = self.length
+      i = 0
+      while i < size
+         yield at(i)
+         i = i + 1
+      end
+      self
+   end
+
+end
+
 class IO
 
   # call-seq:
