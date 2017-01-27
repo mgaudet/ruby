@@ -2931,7 +2931,7 @@ vm_jitted_p(rb_thread_t *th, const rb_iseq_t *iseq_const)
     return Qfalse; /* not jitted yet */
 }
 
-static VALUE
+static inline VALUE
 vm_exec_jitted(rb_thread_t *th)
 {
     VALUE val;
@@ -2947,7 +2947,7 @@ vm_exec_jitted(rb_thread_t *th)
 
 static VALUE vm_exec(rb_thread_t *th);
 
-VALUE
+static VALUE 
 vm_send_without_block(rb_thread_t* th, CALL_INFO ci, CALL_CACHE cc, VALUE recv) 
 {
    VALUE val;
@@ -2975,7 +2975,7 @@ vm_send_without_block(rb_thread_t* th, CALL_INFO ci, CALL_CACHE cc, VALUE recv)
    return val;
 }
 
-static VALUE
+static inline VALUE
 vm_send(rb_thread_t *th, CALL_INFO ci, CALL_CACHE cc, ISEQ blockiseq, rb_control_frame_t *reg_cfp)
 {
     VALUE val;
