@@ -95,6 +95,7 @@ COMMONOBJS    = array.$(OBJEXT) \
 		inits.$(OBJEXT) \
 		io.$(OBJEXT) \
 		iseq.$(OBJEXT) \
+		listener.$(OBJEXT) \
 		load.$(OBJEXT) \
 		marshal.$(OBJEXT) \
 		math.$(OBJEXT) \
