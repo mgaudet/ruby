@@ -19,6 +19,7 @@
 #include "probes.h"
 #include "probes_helper.h"
 #include "jit.h"
+#include "listener.h"
 
 VALUE rb_str_concat_literals(size_t, const VALUE*);
 
@@ -1491,6 +1492,12 @@ rb_vm_check_redefinition_opt_method(const rb_method_entry_t *me, VALUE klass)
 	    int flag = vm_redefinition_check_flag(klass);
 
 	    ruby_vm_redefined_flag[bop] |= flag;
+
+            /* Notify BOP redefinition listeners */
+            struct bop_redefinition_data bop_data;
+            bop_data.bop = bop;
+            bop_data.flag = flag;
+	    rb_vm_notify_listeners(LISTENER_BOP_REDEFINITION, &bop_data);
 	}
     }
 }

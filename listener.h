@@ -20,7 +20,7 @@ enum listener_event {
 /**
  * Registers a particular Listener
  *
- * Note: Listeners should not depend on a particular order of listener evaluation. 
+ * Note: Listeners should not depend on a particular order of listener evaluation.
  *
  * @param event                 The event this listener gets called on
  * @param listener_data         A pointer to data the listener function will need to execute.
@@ -46,13 +46,29 @@ int rb_vm_register_listener(enum listener_event event,
  */
 void rb_vm_notify_listeners(enum listener_event event, void* event_data);
 
+
+/*---- Listener Functions --------*/
+
 /**
  * A basic listener useful for debugging.
  * @param event_type    The event type
  * @param listener_data A string which is looked up via getenv to determine activation.
  * @param event_data    Another string to print when the lister fires.
  */
-void echo_listener(enum listener_event event, void* listener_data, void* event_data); 
- 
+void echo_listener(enum listener_event event, void* listener_data, void* event_data);
+
+/*
+ * To pass more data across the void* barrier we can define some structures
+ * here.
+ */
+
+/**
+ * For communicating information about BOP redefinition we need to communicate both
+ * the BOP and the flag being set
+ */
+struct bop_redefinition_data {
+   int bop;
+   int flag;
+};
 
 #endif /* RUBY_LISTENER_H */
