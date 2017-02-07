@@ -19,6 +19,7 @@
 #include "id.h"
 #include "ccan/list/list.h"
 #include "id_table.h"
+#include "listener.h"
 
 struct rb_id_table *rb_global_tbl;
 static ID autoload, classpath, tmp_classpath, classid;
@@ -2622,6 +2623,7 @@ const_tbl_update(struct autoload_const_set_args *args)
     struct rb_id_table *tbl = RCLASS_CONST_TBL(klass);
     rb_const_flag_t visibility = CONST_PUBLIC;
     rb_const_entry_t *ce;
+    struct constant_redefinition_data redef_data;
 
     if (rb_id_table_lookup(tbl, id, &value)) {
 	ce = (rb_const_entry_t *)value;
@@ -2653,6 +2655,13 @@ const_tbl_update(struct autoload_const_set_args *args)
 		rb_compile_warn(RSTRING_PTR(ce->file), ce->line,
 				"previous definition of %"PRIsVALUE" was here", name);
 	    }
+
+            /* Notify Listeners */
+            redef_data.klass     = klass;
+            redef_data.id        = id;
+            redef_data.old_value = value;
+            redef_data.new_value = val;
+            rb_vm_notify_listeners(LISTENER_CONSTANT_REDEFINITION, &redef_data);
 	}
 	rb_clear_constant_cache();
 	setup_const_entry(ce, klass, val, visibility);

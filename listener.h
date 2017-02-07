@@ -10,9 +10,10 @@
  * Defined listener types
  */
 enum listener_event {
-   LISTENER_GENERIC,           /* for debug / unspecified purposes */
-   LISTENER_BOP_REDEFINITION,  /* for basic op redefinition */
-   LISTENER_OP_CODE_EXECUTION, /* for op execution */
+   LISTENER_GENERIC,               /* for debug / unspecified purposes */
+   LISTENER_BOP_REDEFINITION,      /* for basic op redefinition */
+   LISTENER_OP_CODE_EXECUTION,     /* for op execution */
+   LISTENER_CONSTANT_REDEFINITION, /* When redefining a constant */
    LISTENER_LAST,
 };
 
@@ -69,6 +70,16 @@ void echo_listener(enum listener_event event, void* listener_data, void* event_d
 struct bop_redefinition_data {
    int bop;
    int flag;
+};
+
+/**
+ * For communicating information about constant redefinition.
+ */
+struct constant_redefinition_data {
+   VALUE klass;
+   ID    id; 
+   VALUE old_value;
+   VALUE new_value;
 };
 
 #endif /* RUBY_LISTENER_H */
