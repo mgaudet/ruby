@@ -181,7 +181,7 @@ VALUE listener_statistics(void) {
    int i;
    VALUE h = rb_hash_new();
    for (i = 0; i < LISTENER_LAST; i++) {
-      rb_hash_aset(h, rb_str_new_cstr(listener_event_names[i]), INT2FIX(listener_manager.fire_count[i]));
+      rb_hash_aset(h, ID2SYM(rb_intern(listener_event_names[i])), INT2FIX(listener_manager.fire_count[i]));
    }
    return h;
 }
