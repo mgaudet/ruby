@@ -1,6 +1,8 @@
 #ifndef RUBY_LISTENER_H
 #define RUBY_LISTENER_H 1
 
+#include "ruby/ruby.h" /* for VALUE */
+
 /*
  * An event listener system for CRuby. This allows components to register their
  * interest in particular events occurring.
@@ -12,8 +14,10 @@
 enum listener_event {
    LISTENER_GENERIC,               /* for debug / unspecified purposes */
    LISTENER_BOP_REDEFINITION,      /* for basic op redefinition */
-   LISTENER_OP_CODE_EXECUTION,     /* for op execution */
-   LISTENER_CONSTANT_REDEFINITION, /* When redefining a constant */
+   LISTENER_OP_CODE_EXECUTION,
+   LISTENER_CONSTANT_REDEFINITION,
+   LISTENER_DEFINE_CLASS,
+   LISTENER_DEFINE_METHOD,
    LISTENER_LAST,
 };
 
@@ -77,9 +81,18 @@ struct bop_redefinition_data {
  */
 struct constant_redefinition_data {
    VALUE klass;
-   ID    id; 
+   ID    id;
    VALUE old_value;
    VALUE new_value;
+};
+
+/**
+ * For communicating information about class definition.
+ */
+struct class_definition_data {
+   VALUE klass; /* The defined klass */
+   ID    id;    /* ID of defined class */
+   VALUE super; /* Super class */
 };
 
 #endif /* RUBY_LISTENER_H */

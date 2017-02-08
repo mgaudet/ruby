@@ -28,6 +28,7 @@
 #include "constant.h"
 #include "vm_core.h"
 #include "id_table.h"
+#include "listener.h"
 #include <ctype.h>
 
 #define id_attached id__attached__
@@ -625,7 +626,13 @@ rb_class_inherited(VALUE super, VALUE klass)
     return rb_funcall(super, inherited, 1, klass);
 }
 
-
+#define notify_class_definition(klass, id, super) do { \
+   struct class_definition_data def_data; \
+   def_data.klass = (klass); \
+   def_data.id = (id); \
+   def_data.super = (super); \
+   rb_vm_notify_listeners(LISTENER_DEFINE_CLASS, &def_data); \
+   } while (0);
 
 /*!
  * Defines a top-level class.
@@ -669,6 +676,8 @@ rb_define_class(const char *name, VALUE super)
     rb_const_set(rb_cObject, id, klass);
     rb_class_inherited(super, klass);
 
+    notify_class_definition(klass, id, super);
+
     return klass;
 }
 
@@ -680,7 +689,7 @@ rb_define_class(const char *name, VALUE super)
  * \param super  a class from which the new class will derive.
  *               NULL means \c Object class.
  * \return the created class
- * \throw TypeError if the constant name \a name is already taken but
+ * \throw TypeError if the constant name \a name isjj already taken but
  *                  the constant is not a \c Class.
  * \throw TypeError if the class is already defined but the class can not
  *                  be reopened because its superclass is not \a super.
@@ -742,6 +751,7 @@ rb_define_class_id_under(VALUE outer, ID id, VALUE super)
     rb_class_inherited(super, klass);
     rb_gc_register_mark_object(klass);
 
+    notify_class_definition(klass, id, super);
     return klass;
 }
 
