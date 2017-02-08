@@ -102,3 +102,60 @@ void echo_listener(enum listener_event event, void* listener_data, void* event_d
       fprintf(stderr, "%s\n", str);
    }
 }
+
+/* Trace Buffer support.
+ *
+ * This listener code will be invoked for every notification to allow
+ * retrospective debugging
+ */
+
+
+/**
+ * Single trace entry
+ *
+ * For now, only the event an an entry ID to indicate sequencing.
+ */
+struct listener_trace_entry {
+   int entry_id;
+   enum listener_event event;
+};
+
+/**
+ * Size of event buffer.
+ */
+#define LISTENER_TRACE_BUFFER_SIZE 512
+
+/**
+ * trace of listener events. Can be dumped for problem determination reasons
+ */
+struct listener_trace_buffer {
+   int index;
+   struct listener_trace_entry entries[LISTENER_TRACE_BUFFER_SIZE];
+};
+
+/**
+ * Global trace buffer
+ */
+static struct listener_trace_buffer trace_buffer;
+
+/**
+ * Fills in a circular trace buffer. Useful for post-hoc debugging.
+ */
+void trace_listener(enum listener_event event, void* listener_data, void* event_data) {
+   int index = trace_buffer.index++;
+   struct listener_trace_entry * entry = &(trace_buffer.entries[index % LISTENER_TRACE_BUFFER_SIZE]);
+   entry->entry_id = index;
+   entry->event = event;
+   return;
+}
+
+/**
+ * Register a trace listener for all events.
+ */
+void register_trace_listeners(void) {
+   int i = 0;
+   for (; i < LISTENER_LAST; i++) {
+      rb_vm_register_listener((enum listener_event)i, NULL, trace_listener);
+   }
+}
+

@@ -51,6 +51,12 @@ int rb_vm_register_listener(enum listener_event event,
  */
 void rb_vm_notify_listeners(enum listener_event event, void* event_data);
 
+/* 
+ * For registering trace listeners on all events. 
+ *
+ * Should be called only once.
+ */
+void register_trace_listeners(void); 
 
 /*---- Listener Functions --------*/
 
