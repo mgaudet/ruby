@@ -10,6 +10,8 @@
 
 /**
  * Defined listener types
+ *
+ * If you add a name here, be sure to update the names table in listener.c
  */
 enum listener_event {
    LISTENER_GENERIC,               /* for debug / unspecified purposes */
@@ -21,6 +23,7 @@ enum listener_event {
    LISTENER_LAST,
 };
 
+const char * listener_event_names[];
 
 /**
  * Registers a particular Listener
@@ -51,12 +54,20 @@ int rb_vm_register_listener(enum listener_event event,
  */
 void rb_vm_notify_listeners(enum listener_event event, void* event_data);
 
-/* 
- * For registering trace listeners on all events. 
+/*
+ * For registering trace listeners on all events.
  *
  * Should be called only once.
  */
-void register_trace_listeners(void); 
+void register_trace_listeners(void);
+
+/*
+ * call-seq:
+ *    RubyVM::listener_stats -> hash
+ *
+ * Returns a hash containing statistics on the listener system.
+ */
+VALUE listener_statistics(void);
 
 /*---- Listener Functions --------*/
 

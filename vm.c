@@ -2796,6 +2796,9 @@ Init_VM(void)
     rb_undef_alloc_func(rb_cRubyVM);
     rb_undef_method(CLASS_OF(rb_cRubyVM), "new");
     rb_define_singleton_method(rb_cRubyVM, "stat", vm_stat, -1);
+    rb_define_singleton_method(rb_cRubyVM, "listener_stats", listener_statistics, 0);
+
+    register_trace_listeners(); 
 
     /* FrozenCore (hidden) */
     fcore = rb_class_new(rb_cBasicObject);
@@ -3491,3 +3494,5 @@ void Init_JIT(void)
 #include "vm_jit.inc"
 #include "vm_jit.c"
 #endif
+
+

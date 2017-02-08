@@ -1,8 +1,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "listener.h"
+#include "ruby.h"
 
-/*
+/**
+ * Event names.
+ */
+const char * listener_event_names[] = {
+   "GENERIC",
+   "BOP_REDEFINITION",
+   "OP_CODE_EXECUTION",
+   "CONSTANT_REDEFINITION",
+   "DEFINE_CLASS",
+   "DEFINE_METHOD",
+   NULL
+};
+
+
+/**
  * A listener entry is a triple: {event_type, static_data, notify_function}
  *
  * When a particular listener fires, its notify_function is called with the
@@ -97,8 +112,8 @@ void rb_vm_notify_listeners(enum listener_event event, void* event_data) {
  */
 void echo_listener(enum listener_event event, void* listener_data, void* event_data) {
    char* envvar = (char*)listener_data;
-   char* str    = (char*)event_data; 
-   if (getenv(envvar)) { 
+   char* str    = (char*)event_data;
+   if (getenv(envvar)) {
       fprintf(stderr, "%s\n", str);
    }
 }
@@ -159,3 +174,14 @@ void register_trace_listeners(void) {
    }
 }
 
+/*
+ * Return a dictionary of listener statistics.
+ */
+VALUE listener_statistics(void) {
+   int i;
+   VALUE h = rb_hash_new();
+   for (i = 0; i < LISTENER_LAST; i++) {
+      rb_hash_aset(h, rb_str_new_cstr(listener_event_names[i]), INT2FIX(listener_manager.fire_count[i]));
+   }
+   return h;
+}
