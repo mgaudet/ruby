@@ -28,13 +28,19 @@ struct listener_set {
    int registered_listeners[LISTENER_LAST];
 
    /* For prototyping purposes, I'm going do dump the listeners into a statically
-    * allocated fixed size array. However, I suspect there are better ways to deal
-    * with this.
-    *
+    * allocated fixed size array.
     */
    struct listener_entry listeners[LISTENER_LAST][MAX_LISTENERS_PER_TYPE];
+
+   /**
+    * For statistics gathering purposes.
+    */
+   long fire_count[LISTENER_LAST];
 };
 
+/**
+ * Global listener manager
+ */
 static struct listener_set listener_manager;
 
 int rb_vm_register_listener(enum listener_event event,
@@ -66,15 +72,20 @@ int rb_vm_register_listener(enum listener_event event,
    return 1;
 }
 
-
+/**
+ * Notify each listener for the event type.
+ */
 void rb_vm_notify_listeners(enum listener_event event, void* event_data) {
-   int i;
+   int i, registered_listeners;
    struct listener_entry * listener_slot;
-   for (i = 0; i < listener_manager.registered_listeners[event]; i++) { 
+   registered_listeners = listener_manager.registered_listeners[event];
+   for (i = 0; i < registered_listeners; i++) {
       listener_slot = &(listener_manager.listeners[event][i]);
       listener_slot->notify_function(event, listener_slot->data, event_data);
    }
 
+   /* Update statistics */
+   listener_manager.fire_count[event] += registered_listeners;
    return;
 }
 
