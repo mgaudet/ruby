@@ -1679,6 +1679,31 @@ ruby_exec_event_hook_orig(rb_thread_t *const th, const rb_event_flag_t flag,
 #define EXEC_EVENT_HOOK_AND_POP_FRAME(th_, flag_, self_, id_, called_id_, klass_, data_) \
   EXEC_EVENT_HOOK_ORIG(th_, flag_, self_, id_, called_id_, klass_, data_, 1)
 
+
+#define EXEC_EVENT_HOOK_UNCONDITIONAL_ORIG(th_, flag_, self_, id_, called_id_, klass_, data_, pop_p_) do { \
+   const rb_event_flag_t flag_arg_ = (flag_); \
+   ruby_exec_event_hook_unconditional_orig(th_, flag_arg_, self_, id_, called_id_, klass_, data_, pop_p_); \
+} while (0)
+
+static inline void
+ruby_exec_event_hook_unconditional_orig(rb_thread_t *const th, const rb_event_flag_t flag,
+			  VALUE self, ID id, ID called_id, VALUE klass, VALUE data, int pop_p)
+{
+   struct rb_trace_arg_struct trace_arg;
+   trace_arg.event = flag;
+   trace_arg.th = th;
+   trace_arg.cfp = th->cfp;
+   trace_arg.self = self;
+   trace_arg.id = id;
+   trace_arg.called_id = called_id;
+   trace_arg.klass = klass;
+   trace_arg.data = data;
+   trace_arg.path = Qundef;
+   trace_arg.klass_solved = 0;
+   if (pop_p) rb_threadptr_exec_event_hooks_and_pop_frame(&trace_arg);
+   else rb_threadptr_exec_event_hooks(&trace_arg);
+}
+
 RUBY_SYMBOL_EXPORT_BEGIN
 
 int rb_thread_check_trap_pending(void);
