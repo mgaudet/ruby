@@ -899,6 +899,15 @@ defineclass
 	    rb_const_set(cbase, id, klass);
 	    rb_class_inherited(super, klass);
 	}
+
+
+        struct class_definition_data def_data; 
+        def_data.klass = klass; 
+        def_data.id = id; 
+        def_data.super = super; 
+        rb_vm_notify_listeners(LISTENER_DEFINE_CLASS, &def_data); 
+
+
 	break;
       case VM_DEFINECLASS_TYPE_SINGLETON_CLASS:
 	/* val is dummy.  classdef returns class scope value */
