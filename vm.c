@@ -1483,6 +1483,7 @@ rb_vm_check_redefinition_opt_method(const rb_method_entry_t *me, VALUE klass)
 	    int flag = vm_redefinition_check_flag(klass);
 
 	    ruby_vm_redefined_flag[bop] |= flag;
+	    EXEC_EVENT_HOOK(GET_THREAD(), RUBY_EVENT_BASIC_OP_REDEFINED, GET_THREAD()->cfp->self, 0, 0, klass, bop);
 	}
     }
 }

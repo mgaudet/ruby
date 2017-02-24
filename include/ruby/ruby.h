@@ -2056,12 +2056,13 @@ int ruby_native_thread_p(void);
 #define RUBY_EVENT_ALL       0x00ff
 
 /* for TracePoint extended events */
-#define RUBY_EVENT_B_CALL            0x0100
-#define RUBY_EVENT_B_RETURN          0x0200
-#define RUBY_EVENT_THREAD_BEGIN      0x0400
-#define RUBY_EVENT_THREAD_END        0x0800
-#define RUBY_EVENT_FIBER_SWITCH      0x1000
-#define RUBY_EVENT_TRACEPOINT_ALL    0xffff
+#define RUBY_EVENT_B_CALL               0x0100
+#define RUBY_EVENT_B_RETURN             0x0200
+#define RUBY_EVENT_THREAD_BEGIN         0x0400
+#define RUBY_EVENT_THREAD_END           0x0800
+#define RUBY_EVENT_FIBER_SWITCH         0x1000
+#define RUBY_EVENT_BASIC_OP_REDEFINED   0x2000
+#define RUBY_EVENT_TRACEPOINT_ALL       0xffff
 
 /* special events */
 #define RUBY_EVENT_SPECIFIED_LINE         0x010000
