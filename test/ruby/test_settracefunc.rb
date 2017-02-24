@@ -1599,4 +1599,20 @@ class TestSetTraceFunc < Test::Unit::TestCase
     assert_equal [[:c_call, :itself, :alias_itself], [:c_return, :itself, :alias_itself]], events
     events.clear
   end
+
+  def test_basic_op_redefinition_tracepoint
+     events = []
+     TracePoint.trace(:basic_op_redefined) { |tp|
+        next if !target_thread?
+        events << [tp.event, tp.basic_operation_redefined ]
+     }.enable { 
+     String.class_eval do 
+      def +(s)
+        self.concat(s)
+      end
+     end
+     }
+     assert_equal events.length, 2, "Events #{events}"
+     assert_equal events[0][0], :basic_op_redefined
+  end
 end
