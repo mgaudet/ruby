@@ -599,6 +599,7 @@ get_event_id(rb_event_flag_t event)
 	C(fiber_switch, FIBER_SWITCH);
 	C(specified_line, SPECIFIED_LINE);
         C(basic_op_redefined, BASIC_OP_REDEFINED);
+        C(constant_redefined, CONSTANT_REDEFINED);
       case RUBY_EVENT_LINE | RUBY_EVENT_SPECIFIED_LINE: CONST_ID(id, "line"); return id;
 #undef C
       default:
@@ -708,6 +709,7 @@ symbol2event_flag(VALUE v)
     C(a_call, A_CALL);
     C(a_return, A_RETURN);
     C(basic_op_redefined, BASIC_OP_REDEFINED);
+    C(constant_redefined, CONSTANT_REDEFINED);
 #undef C
     rb_raise(rb_eArgError, "unknown event: %"PRIsVALUE, rb_sym2str(sym));
 }
@@ -909,6 +911,26 @@ rb_tracearg_basic_op_redefined(rb_trace_arg_t *trace_arg)
    return hash;
 }
 
+VALUE
+rb_tracearg_constant_redefined(rb_trace_arg_t *trace_arg)
+{
+   VALUE hash;
+   if (trace_arg->event & (RUBY_EVENT_CONSTANT_REDEFINED)) {
+      /* ok */
+   }
+   else {
+      rb_raise(rb_eRuntimeError, "not supported by this event");
+   }
+   if (trace_arg->data == Qundef) {
+      rb_bug("tp_basic_op_redefined_m: unreachable");
+   }
+
+   hash  = rb_hash_new();
+   rb_hash_aset(hash, ID2SYM(rb_intern("klass")),    trace_arg->self);
+   rb_hash_aset(hash, ID2SYM(rb_intern("variable")), trace_arg->klass);
+   rb_hash_aset(hash, ID2SYM(rb_intern("value")),    trace_arg->data);
+   return hash;
+}
 
 VALUE
 rb_tracearg_raised_exception(rb_trace_arg_t *trace_arg)
@@ -1074,6 +1096,16 @@ tracepoint_basic_operation_redefined(VALUE tpval)
 {
    return rb_tracearg_basic_op_redefined(get_trace_arg());
 }
+
+/*
+ * klass and constant redefined on :basic_op_redefinition event.
+ */
+static VALUE
+tracepoint_constant_redefined(VALUE tpval)
+{
+   return rb_tracearg_constant_redefined(get_trace_arg());
+}
+
 
 static void
 tp_call_trace(VALUE tpval, rb_trace_arg_t *trace_arg)
@@ -1569,6 +1601,7 @@ Init_vm_trace(void)
     rb_define_method(rb_cTracePoint, "return_value", tracepoint_attr_return_value, 0);
     rb_define_method(rb_cTracePoint, "raised_exception", tracepoint_attr_raised_exception, 0);
     rb_define_method(rb_cTracePoint, "basic_operation_redefined", tracepoint_basic_operation_redefined, 0);
+    rb_define_method(rb_cTracePoint, "constant_redefined", tracepoint_constant_redefined, 0);
 
     rb_define_singleton_method(rb_cTracePoint, "stat", tracepoint_stat_s, 0);
 

@@ -1,6 +1,10 @@
 # frozen_string_literal: false
 require 'test/unit'
 
+module ModuleForConst 
+   P = 0
+end
+
 class TestSetTraceFunc < Test::Unit::TestCase
   def setup
     @original_compile_option = RubyVM::InstructionSequence.compile_option
@@ -1616,5 +1620,17 @@ class TestSetTraceFunc < Test::Unit::TestCase
      assert_equal events[0][0], :basic_op_redefined
      assert_equal events[0][1][:klass], String
      assert_equal events[0][1][:bop], :BOP_PLUS
+  end
+
+  def test_constant_redefinition_tracepoint
+     events = []
+     TracePoint.new(:constant_redefined) { |tp|
+        next if !target_thread?
+        events << [tp.event, tp.constant_redefined ]
+     }.enable { 
+       ModuleForConst.const_set('P', 1)  
+     }
+     assert_equal events.length, 1, "Events #{events}"
+     assert_equal events[0][0], :constant_redefined
   end
 end
