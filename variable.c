@@ -20,6 +20,7 @@
 #include "ccan/list/list.h"
 #include "id_table.h"
 #include "debug_counter.h"
+#include "vm_core.h"
 
 struct rb_id_table *rb_global_tbl;
 static ID autoload, classpath, tmp_classpath, classid;
@@ -2630,6 +2631,7 @@ const_tbl_update(struct autoload_const_set_args *args)
 		rb_compile_warn(RSTRING_PTR(ce->file), ce->line,
 				"previous definition of %"PRIsVALUE" was here", name);
 	    }
+            EXEC_EVENT_HOOK(GET_THREAD(), RUBY_EVENT_CONSTANT_REDEFINED, klass, 0, 0, ID2SYM(id), val);
 	}
 	rb_clear_constant_cache();
 	setup_const_entry(ce, klass, val, visibility);
