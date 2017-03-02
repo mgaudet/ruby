@@ -28,6 +28,8 @@
 #include "env/CompilerEnv.hpp"
 #include "env/RawAllocator.hpp"
 #include "ras/DebugCounter.hpp"
+#include "ruby/ruby.h"
+#include "ruby/debug.h"
 
 extern void setupCodeCacheParameters(int32_t *, OMR::CodeCacheCodeGenCallbacks *callBacks, int32_t *numHelpers, int32_t *CCPreLoadedCodeSize);
 typedef VALUE (*jit_method_t)(rb_thread_t*);
@@ -181,6 +183,30 @@ initializeCodeCache(TR::CodeCacheManager &codeCacheManager)
    codeCacheManager.initialize(true, 1);
    }
 
+/**
+ * Some demo code that shows the two ways that the hooks can be commected in
+ * the JIT code.
+ *
+ * A raw hook gets the trace arg directly, and is added by calling
+ * rb_add_event_hook2 with the RUBY_EVENT_HOOK_FLAG_RAW_ARG flag set.
+ *
+ * A regular hook has _some_ of the data from the trace_arg marshalled for you.
+ * and is added by calling rb_add_event_hook.
+ */
+void bop_redefinition_hook(rb_event_flag_t event, VALUE data, VALUE self, ID id, VALUE klass)
+   {
+   }
+
+void bop_redefinition_hook_raw(rb_event_flag_t event, VALUE data, const rb_trace_arg_t* trace_arg)
+   {
+   }
+
+void registerHooks()
+   {
+   rb_add_event_hook(bop_redefinition_hook, RUBY_EVENT_BASIC_OP_REDEFINED, Qnil);
+   rb_add_event_hook2((rb_event_hook_func_t)bop_redefinition_hook_raw, RUBY_EVENT_BASIC_OP_REDEFINED, Qnil, RUBY_EVENT_HOOK_FLAG_RAW_ARG );
+   }
+
 int jitInit(struct rb_vm_struct *vm, char *options)
    {
 
@@ -223,6 +249,9 @@ int jitInit(struct rb_vm_struct *vm, char *options)
       {
       vm->jit->options |= CODE_CACHE_RECLAMATION;
       }
+
+   //Register Hooks
+   registerHooks();
 
    return 0;
    }
