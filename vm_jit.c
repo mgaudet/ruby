@@ -16,7 +16,7 @@
 VALUE rb_reg_new_ary(VALUE ary, int options);
 const rb_iseq_t * def_iseq_ptr(rb_method_definition_t *def);
 
-#define JIT_DEFAULT_COUNT 1000
+#define JIT_DEFAULT_COUNT 0
 
 /**
  * Returns the name of the JIT DLL to be loaded. 

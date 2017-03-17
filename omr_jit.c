@@ -21,7 +21,7 @@
  */
 const char *
 get_jit_dll_name() {
-   return "librbjit.so";
+   return "libjitbuilderjit.so";
 }
 
 /**

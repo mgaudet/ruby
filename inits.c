@@ -53,7 +53,9 @@ rb_call_inits(void)
     CALL(GC);
     CALL(Enumerator);
     CALL(VM);
+#if 0 
     CALL(JIT);
+#endif
     CALL(ISeq);
     CALL(Thread);
     CALL(process);

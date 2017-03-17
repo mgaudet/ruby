@@ -1,4 +1,4 @@
 [submodule "omr"]
-	path = omr
+	path = jitbuilder/omr
 	url = https://github.com/eclipse/omr.git 
 	branch = master

@@ -10,9 +10,9 @@
 #define JIT_H
 
 #include "ruby.h"       /* For VALUE */
+#include "vm_core.h"
 #include "method.h"     /* For iseq_t */
 #include "vm_exec.h"
-#include "vm_core.h"
 
 /** 
  * 

@@ -68,7 +68,7 @@ ENC_MK        = enc.mk
 MAKE_ENC      = -f $(ENC_MK) V="$(V)" UNICODE_HDR_DIR="$(UNICODE_HDR_DIR)" \
 		RUBY="$(MINIRUBY)" MINIRUBY="$(MINIRUBY)" $(MFLAGS)
 
-ifdef WITH_OMR_JIT
+ifdef JIT_OMR 
    JITOBJS = omr_jit.$(OBJEXT)
 else
    JITOBJS = no_jit.$(OBJEXT)
@@ -2558,7 +2558,7 @@ vm.$(OBJEXT): {$(VPATH)}intern.h
 vm.$(OBJEXT): {$(VPATH)}internal.h
 vm.$(OBJEXT): {$(VPATH)}io.h
 vm.$(OBJEXT): {$(VPATH)}iseq.h
-ifdef WITH_OMR_JIT
+ifdef JIT_OMR
 vm.$(OBJEXT): {$(VPATH)}jit.h
 endif
 vm.$(OBJEXT): {$(VPATH)}method.h
@@ -2577,7 +2577,7 @@ vm.$(OBJEXT): {$(VPATH)}thread_native.h
 vm.$(OBJEXT): {$(VPATH)}vm.c
 vm.$(OBJEXT): {$(VPATH)}vm.h
 vm.$(OBJEXT): {$(VPATH)}vm.inc
-ifdef WITH_OMR_JIT
+ifdef JIT_OMR
 vm.$(OBJEXT): {$(VPATH)}vm_jit.inc
 endif
 vm.$(OBJEXT): {$(VPATH)}vm_args.c
