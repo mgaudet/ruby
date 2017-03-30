@@ -598,6 +598,8 @@ get_event_id(rb_event_flag_t event)
 	C(thread_end, THREAD_END);
 	C(fiber_switch, FIBER_SWITCH);
 	C(specified_line, SPECIFIED_LINE);
+        C(basic_op_redefined, BASIC_OP_REDEFINED);
+        C(constant_redefined, CONSTANT_REDEFINED);
       case RUBY_EVENT_LINE | RUBY_EVENT_SPECIFIED_LINE: CONST_ID(id, "line"); return id;
 #undef C
       default:
@@ -706,6 +708,8 @@ symbol2event_flag(VALUE v)
     C(specified_line, SPECIFIED_LINE);
     C(a_call, A_CALL);
     C(a_return, A_RETURN);
+    C(basic_op_redefined, BASIC_OP_REDEFINED);
+    C(constant_redefined, CONSTANT_REDEFINED);
 #undef C
     rb_raise(rb_eArgError, "unknown event: %"PRIsVALUE, rb_sym2str(sym));
 }
@@ -851,6 +855,81 @@ rb_tracearg_return_value(rb_trace_arg_t *trace_arg)
 	rb_bug("tp_attr_return_value_m: unreachable");
     }
     return trace_arg->data;
+}
+
+VALUE
+rb_tracearg_basic_op_redefined(rb_trace_arg_t *trace_arg)
+{
+   const char * basic_operator_names[] = {
+    "BOP_PLUS",
+    "BOP_MINUS",
+    "BOP_MULT",
+    "BOP_DIV",
+    "BOP_MOD",
+    "BOP_EQ",
+    "BOP_EQQ",
+    "BOP_LT",
+    "BOP_LE",
+    "BOP_LTLT",
+    "BOP_AREF",
+    "BOP_ASET",
+    "BOP_LENGTH",
+    "BOP_SIZE",
+    "BOP_EMPTY_P",
+    "BOP_SUCC",
+    "BOP_GT",
+    "BOP_GE",
+    "BOP_NOT",
+    "BOP_NEQ",
+    "BOP_MATCH",
+    "BOP_FREEZE",
+    "BOP_MAX",
+    "BOP_MIN",
+    NULL
+   };
+
+   VALUE bop, klass, hash;
+   if (trace_arg->event & (RUBY_EVENT_BASIC_OP_REDEFINED)) {
+      /* ok */
+   }
+   else {
+      rb_raise(rb_eRuntimeError, "not supported by this event");
+   }
+   if (trace_arg->data == Qundef) {
+      rb_bug("tp_basic_op_redefined_m: unreachable");
+   }
+   bop   = trace_arg->data;
+   klass = trace_arg->klass;
+
+   if (bop > BOP_LAST_) {
+      rb_bug("rb_tracearg_basic_op_redefined: Invalid bop %d", bop);
+   }
+
+   hash  = rb_hash_new();
+   rb_hash_aset(hash, ID2SYM(rb_intern("klass")),klass);
+   rb_hash_aset(hash, ID2SYM(rb_intern("bop")), ID2SYM(rb_intern(basic_operator_names[bop])));
+   return hash;
+}
+
+VALUE
+rb_tracearg_constant_redefined(rb_trace_arg_t *trace_arg)
+{
+   VALUE hash;
+   if (trace_arg->event & (RUBY_EVENT_CONSTANT_REDEFINED)) {
+      /* ok */
+   }
+   else {
+      rb_raise(rb_eRuntimeError, "not supported by this event");
+   }
+   if (trace_arg->data == Qundef) {
+      rb_bug("tp_basic_op_redefined_m: unreachable");
+   }
+
+   hash  = rb_hash_new();
+   rb_hash_aset(hash, ID2SYM(rb_intern("klass")),    trace_arg->self);
+   rb_hash_aset(hash, ID2SYM(rb_intern("variable")), trace_arg->klass);
+   rb_hash_aset(hash, ID2SYM(rb_intern("value")),    trace_arg->data);
+   return hash;
 }
 
 VALUE
@@ -1008,6 +1087,25 @@ tracepoint_attr_raised_exception(VALUE tpval)
 {
     return rb_tracearg_raised_exception(get_trace_arg());
 }
+
+/*
+ * klass and basic operation redefined on :basic_op_redefinition event.
+ */
+static VALUE
+tracepoint_basic_operation_redefined(VALUE tpval)
+{
+   return rb_tracearg_basic_op_redefined(get_trace_arg());
+}
+
+/*
+ * klass and constant redefined on :basic_op_redefinition event.
+ */
+static VALUE
+tracepoint_constant_redefined(VALUE tpval)
+{
+   return rb_tracearg_constant_redefined(get_trace_arg());
+}
+
 
 static void
 tp_call_trace(VALUE tpval, rb_trace_arg_t *trace_arg)
@@ -1502,6 +1600,8 @@ Init_vm_trace(void)
     rb_define_method(rb_cTracePoint, "self", tracepoint_attr_self, 0);
     rb_define_method(rb_cTracePoint, "return_value", tracepoint_attr_return_value, 0);
     rb_define_method(rb_cTracePoint, "raised_exception", tracepoint_attr_raised_exception, 0);
+    rb_define_method(rb_cTracePoint, "basic_operation_redefined", tracepoint_basic_operation_redefined, 0);
+    rb_define_method(rb_cTracePoint, "constant_redefined", tracepoint_constant_redefined, 0);
 
     rb_define_singleton_method(rb_cTracePoint, "stat", tracepoint_stat_s, 0);
 
