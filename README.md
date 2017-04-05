@@ -4,6 +4,12 @@ This branch contains a modified version of the Ruby VM that has been altered to
 interact with the [Eclipse OMR](https://github.com/eclipse/omr) compiler technolgy 
 in order to add a Just-In-Time compiler to Ruby. 
 
+To read more about this project and its future, please see the following blog posts
+that introduce the tecnhnology and discuss its future. 
+
+- [Introducing the Ruby+OMR JIT](https://developer.ibm.com/open/2016/11/18/introducing-ruby-jit/)
+- [Ruby+OMR JIT Compiler: What's next?](https://developer.ibm.com/open/2017/03/01/ruby-omr-jit-compiler-whats-next/)
+
 ## Status: 
 
 As of today, this branch has only been tested on Linux x86-64. When run with 
