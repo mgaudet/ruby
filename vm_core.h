@@ -282,14 +282,10 @@ typedef enum iseq_type {
 } iseq_type;              /* instruction sequence type */
 
 #if defined(JIT_OMR)
-typedef enum iseq_jit_state {
-    ISEQ_JIT_STATE_ZERO = 0, /* un-initialized */
-    ISEQ_JIT_STATE_INTERPRETED,
-    ISEQ_JIT_STATE_BLACKLISTED, /* don't try to jit */
-    ISEQ_JIT_STATE_RECOMP_BLACKLISTED, /* don't try to recompile */
-    ISEQ_JIT_STATE_JITTED
-} iseq_jit_state;
-
+/** 
+ * A doubly-linked list of information about compiled
+ * methods for a particular iseq. 
+ */
 typedef struct iseq_jit_body_info {
     int opt_level;
     long recomp_count;
@@ -298,6 +294,19 @@ typedef struct iseq_jit_body_info {
     struct iseq_jit_body_info *prev;
     struct iseq_jit_body_info *next;
 } iseq_jit_body_info;
+
+/** 
+ * The JIT related states a method can be in.
+ */
+typedef enum iseq_jit_state {
+    ISEQ_JIT_STATE_ZERO = 0,           /* un-initialized */
+    ISEQ_JIT_STATE_INTERPRETED,        /* JIT info is initialized (count set, etc),
+                                          but still interpreting
+                                        */
+    ISEQ_JIT_STATE_BLACKLISTED,        /* Removed from JIT consideration. */
+    ISEQ_JIT_STATE_RECOMP_BLACKLISTED, /* Removed from recompilation consideration. */
+    ISEQ_JIT_STATE_JITTED              /* A JIT body exists */ 
+} iseq_jit_state;
 #endif
 
 
