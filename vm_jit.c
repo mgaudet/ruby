@@ -66,18 +66,20 @@ vm_jit_init(rb_vm_t *vm, jit_globals_t globals)
     }
 
     /* vm->jit interface */
-    jit->dll_handle  = handle;
-    jit->default_count = JIT_DEFAULT_COUNT;
-    jit->init_f        = dlsym(handle, "jit_init"); 
-    jit->terminate_f = dlsym(handle, "jit_terminate");
-    jit->compile_f   = dlsym(handle, "jit_compile");
-    jit->dispatch_f  = dlsym(handle, "jit_dispatch");
-    jit->crash_f     = dlsym(handle, "jit_crash");
+    jit->dll_handle     = handle;
+    jit->default_count  = JIT_DEFAULT_COUNT;
+    jit->init_f         = dlsym(handle, "jit_init"); 
+    jit->terminate_f    = dlsym(handle, "jit_terminate");
+    jit->compile_f      = dlsym(handle, "jit_compile");
+    jit->update_state_f = dlsym(handle, "jit_update_state");
+    jit->dispatch_f     = dlsym(handle, "jit_dispatch");
+    jit->crash_f        = dlsym(handle, "jit_crash");
 
-    if (!jit->init_f      ||
-	!jit->terminate_f ||
-	!jit->compile_f   ||
-	!jit->crash_f   ||
+    if (!jit->init_f            ||
+	!jit->terminate_f       ||
+	!jit->compile_f         ||
+	!jit->update_state_f    ||
+	!jit->crash_f           ||
         !jit->dispatch_f   ) {
 	fprintf(stderr, "vm_jit_init: missing symbols in %s: init %p, terminate %p, compile %p, dispatch %p crash %p\n",
                 dll_name,

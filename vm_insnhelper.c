@@ -2842,37 +2842,15 @@ static VALUE
 vm_jitted_p(rb_thread_t *th, const rb_iseq_t *iseq_const)
 {
     rb_iseq_t * iseq = (rb_iseq_t*)iseq_const; /* Cast away constness: FIX THIS */
-    if (!th->vm->jit) return Qfalse;
- 
-    if (iseq->jit.state == ISEQ_JIT_STATE_BLACKLISTED)
-        return Qfalse;
-    
-    if (iseq->jit.state == ISEQ_JIT_STATE_RECOMP_BLACKLISTED)
-        return Qtrue;
 
-    if (iseq->jit.state == ISEQ_JIT_STATE_JITTED) {
-        if (th->vm->jit->options & TIERED_COMPILATION) {
-            --iseq->jit.body_info->recomp_count;
-            if (iseq->jit.body_info->recomp_count < 0) {
-                return th->vm->jit->compile_f(iseq);
-            }
-        }
-        return Qtrue;
-    }
-   
-    if (iseq->jit.state == ISEQ_JIT_STATE_ZERO) {
-        iseq->jit.u.count = th->vm->jit->default_count;
-        iseq->jit.state = ISEQ_JIT_STATE_INTERPRETED;
-        iseq->jit.body_info = NULL;
-    }
+    // Check this early to short circuit to happiness :) 
+    if (iseq->jit.state == ISEQ_JIT_STATE_JITTED) 
+       return Qtrue; 
 
-    --iseq->jit.u.count;
+    if (!th->vm->jit)
+       return Qfalse;
 
-    if (iseq->jit.u.count < 0) {
-       return th->vm->jit->compile_f(iseq);
-    }
-    
-    return Qfalse; /* not jitted yet */
+    return th->vm->jit->update_state_f(th,iseq_const); 
 }
 
 static VALUE
