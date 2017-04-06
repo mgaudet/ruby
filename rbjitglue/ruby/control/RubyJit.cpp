@@ -460,4 +460,51 @@ void jit_crash(void*)
    jitCrashReport();
    }
 
+/**
+ * Return Qtrue if there is a body to execute.
+ *
+ * Otherwise, update the states for this method. 
+ */
+VALUE jit_update_state(rb_thread_t* th, const rb_iseq_t* iseq_const)
+   { 
+   if (iseq_const->jit.state == ISEQ_JIT_STATE_JITTED) 
+       return Qtrue; 
+
+   if (iseq_const->jit.state == ISEQ_JIT_STATE_RECOMP_BLACKLISTED)
+      return Qtrue;
+
+   if (iseq_const->jit.state == ISEQ_JIT_STATE_BLACKLISTED)
+      return Qfalse;
+
+   rb_iseq_t* iseq = (rb_iseq_t*)iseq_const; 
+   if (iseq_const->jit.state == ISEQ_JIT_STATE_JITTED)
+      {
+      if (th->vm->jit->options & TIERED_COMPILATION)
+         {
+         --iseq_const->jit.body_info->recomp_count;
+         if (iseq_const->jit.body_info->recomp_count < 0)
+            {
+            return jit_compile(iseq);
+            }
+         }
+      return Qtrue;
+      }
+
+   if (iseq->jit.state == ISEQ_JIT_STATE_ZERO)
+      {
+      iseq->jit.u.count = th->vm->jit->default_count;
+      iseq->jit.state = ISEQ_JIT_STATE_INTERPRETED;
+      iseq->jit.body_info = NULL;
+      }
+
+   --iseq->jit.u.count;
+
+   if (iseq_const->jit.u.count < 0)
+      {
+      return jit_compile(iseq);
+      }
+
+    return Qfalse; /* not jitted yet */
+   }
+
 } /* extern C */
