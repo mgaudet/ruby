@@ -30,12 +30,19 @@
 #include "optimizer/InlinerFailureReason.hpp"
 #include "ruby/config.h"
 #include "ruby/version.h"
+#include "control/Options.hpp"
+#include "env/GuardedCall.hpp"
 
 TR_RubyFE *TR_RubyFE::_instance = 0;
 
 TR_RubyFE::TR_RubyFE(struct rb_vm_struct *vm)
    : TR::FEBase<TR_RubyFE>(),
-     _vm(vm)
+     _vm(vm),
+     _compilationQueue(feGetEnv("ASYNC_COMPILATION_TRACE")), //Check Verbose options after working.
+     _compilationRegistry(false
+                         // feGetEnv("ASYNC_COMPILATION_TRACE")
+                          
+                          )
    {
    TR_ASSERT(!_instance, "TR_RubyFE must be initialized only once");
    _instance = this;
@@ -45,5 +52,5 @@ TR_RubyFE::TR_RubyFE(struct rb_vm_struct *vm)
 const char *
 TR_RubyFE::id2name(ID id)
    {
-   return _vm->jit->vm_functions.rb_id2name_f(id);
+   return GVLGuardedCall(_vm->jit->vm_functions.rb_id2name_f, id);
    }

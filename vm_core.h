@@ -303,6 +303,7 @@ typedef enum iseq_jit_state {
     ISEQ_JIT_STATE_INTERPRETED,        /* JIT info is initialized (count set, etc),
                                           but still interpreting
                                         */
+    ISEQ_JIT_STATE_QUEUED,             /* Queued for compilation */
     ISEQ_JIT_STATE_BLACKLISTED,        /* Removed from JIT consideration. */
     ISEQ_JIT_STATE_RECOMP_BLACKLISTED, /* Removed from recompilation consideration. */
     ISEQ_JIT_STATE_JITTED              /* A JIT body exists */ 

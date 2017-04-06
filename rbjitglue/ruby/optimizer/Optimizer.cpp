@@ -25,6 +25,7 @@
 #pragma csect(TEST,"RubyOptimizer#T")
 
 #include "optimizer/Optimizer.hpp"
+#include "optimizer/Optimization_inlines.hpp"
 
 #include "optimizer/CFGSimplifier.hpp"
 #include "optimizer/CompactLocals.hpp"

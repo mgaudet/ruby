@@ -25,6 +25,7 @@
 
 #include "insns.inc"
 #include "insns_info.inc"
+#include "jit.h"
 
 VALUE rb_cISeq;
 static VALUE iseqw_new(const rb_iseq_t *iseq);
@@ -70,8 +71,12 @@ void
 rb_iseq_free(const rb_iseq_t *iseq)
 {
     RUBY_FREE_ENTER("iseq");
-
+   
     if (iseq) {
+        /* Notify JIT of iseq free */ 
+        if (GET_VM()->jit) {
+           GET_VM()->jit->iseq_free_f(iseq); 
+        }
 	if (iseq->body) {
 	    ruby_xfree((void *)iseq->body->iseq_encoded);
 	    ruby_xfree((void *)iseq->body->line_info_table);
