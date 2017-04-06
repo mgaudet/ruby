@@ -1703,15 +1703,18 @@ static inline VALUE
 vm_exec2(rb_thread_t *th, VALUE initial)
 {
 #if defined(JIT_OMR)
-    VALUE result;
     /* The OMR JIT is currently not able to support invocations of methods with a
      * frame type of RESCUE.
      *
      * We check the frame type before checking if a method is has been jitted
      * in order to avoid decrementing the compilation count and compiling a
      * method if we're never going to be able to run it.
-     *
-     * Todo: 
+     */
+
+    if (VM_FRAME_TYPE(th->cfp) == VM_FRAME_MAGIC_RESCUE) 
+       return vm_exec_core(th, initial);
+
+    /* Todo: 
      *
      *    The FINISH_P check below should be improved. Without the check, a
      *    return from vm_exec_2 looks like an early exit from vm_exec_core,
@@ -1725,17 +1728,16 @@ vm_exec2(rb_thread_t *th, VALUE initial)
      *    early experimentation with this was unsuccessful. 
      *
      */
-    if (VM_FRAME_TYPE(th->cfp) != VM_FRAME_MAGIC_RESCUE && 
-        VM_FRAME_FINISHED_P(th->cfp) && 
-        vm_jitted_p(th, (rb_iseq_t*)th->cfp->iseq) == Qtrue) {  //Cast away constness for compiler  -- FIXME: May require redesign. 
-	result = vm_exec_jitted(th);
-    } else {
-	result = vm_exec_core(th, initial);
-    }
-    return result;
-#else 
-    return vm_exec_core(th, initial);
+    if (!VM_FRAME_FINISHED_P(th->cfp))
+       return vm_exec_core(th, initial);
+
+    //Cast away constness for compiler  -- FIXME: May require redesign. 
+    if (vm_jitted_p(th, (rb_iseq_t*)th->cfp->iseq) == Qtrue) 
+	return vm_exec_jitted(th);
+
+    // At this point, still need to invoke vm_exec core.
 #endif
+    return vm_exec_core(th, initial);
 }
 
 static VALUE
