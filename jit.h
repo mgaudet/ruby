@@ -182,11 +182,19 @@ struct rb_jit_struct {
      */
     VALUE (*update_state_f)(rb_thread_t*, const rb_iseq_t* iseq); 
 
+    /**
+     * Create a new compilation thread. 
+     */
+    void (*create_and_start_compilation_thread_f)(rb_vm_t* vm);
+
    /** JIT crash Handler  */  
     void (*crash_f)(void);
 
    /** Dispatch to compiled code. */
     VALUE (*dispatch_f)(rb_thread_t *th, jit_method_t code);
+
+   /** Notify about iseq release */
+    void (*iseq_free_f)(const rb_iseq_t*); 
 
    /*
     * jit->vm interface

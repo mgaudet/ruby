@@ -26,9 +26,12 @@
 #include "env/jittypes.h"
 #include "runtime/RubyJitConfig.hpp"
 #include "runtime/CodeCache.hpp"
-
+#include "control/CompilationQueue.hpp" 
+#include "control/CompilationRequest.hpp"
+#include "control/CompilationRegistry.hpp"
 
 class TR_RubyFE;
+namespace TR { class Compilation; } 
 
 namespace TR
 {
@@ -47,6 +50,17 @@ class TR_RubyFE : public TR::FEBase<TR_RubyFE>
    private:
    static TR_RubyFE *_instance;
    struct rb_vm_struct *_vm;
+
+   /** 
+    * The compilation queue. This is going to be processed 
+    * by compilation threads.
+    */
+   TR::CompilationQueue<TR::CompilationRequest> _compilationQueue; 
+
+   /**
+    * Compilation registry. Able to manipulate compilations via this.
+    */
+   TR::CompilationRegistry _compilationRegistry;
 
    public:
    // The constructor can only be called once by jitInit
@@ -68,6 +82,8 @@ class TR_RubyFE : public TR::FEBase<TR_RubyFE>
    rb_jit_t *getJitInterface() { return _vm->jit; }
    const char *id2name(ID);
 
+   TR::CompilationQueue<TR::CompilationRequest>& getCompilationQueue() { return _compilationQueue; } 
+   TR::CompilationRegistry& getCompilationRegistry()                   { return _compilationRegistry; } 
    };
 
 #endif /* RUBYFE_HPP_gfgYoA */

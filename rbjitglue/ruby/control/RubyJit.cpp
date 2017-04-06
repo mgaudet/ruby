@@ -21,13 +21,20 @@
 #include "control/CompileMethod.hpp"
 #include "control/Options.hpp"
 #include "control/Options_inlines.hpp"
+#include "control/CompilationQueue.hpp" 
+#include "control/CompilationRequest.hpp" 
 #include "env/IO.hpp"
 #include "env/VMHeaders.hpp"
 #include "ruby/version.h"
 #include "ruby/config.h"
+#include "ruby/thread.h"
 #include "env/CompilerEnv.hpp"
 #include "env/RawAllocator.hpp"
 #include "ras/DebugCounter.hpp"
+#include <string>
+#include <thread>
+#include <chrono> 
+#include "compile/Compilation.hpp"
 
 extern void setupCodeCacheParameters(int32_t *, OMR::CodeCacheCodeGenCallbacks *callBacks, int32_t *numHelpers, int32_t *CCPreLoadedCodeSize);
 typedef VALUE (*jit_method_t)(rb_thread_t*);
@@ -274,13 +281,147 @@ int jitTerminate(void *)
    return 0;
    }
 
-void *compileRubyISeq(rb_iseq_t *iseq, const char *name, TR_Hotness optLevel)
+VALUE compileRubyISeq(rb_iseq_t *iseq, std::string name, TR_Hotness optLevel)
    {
    int32_t rc = 0;
-   RubyMethodBlock mb(iseq, name);
+   RubyMethodBlock mb(iseq, name.c_str()); //OK, as lifetime is shorter than param. 
    ResolvedRubyMethod compilee(mb);
+   void * startPC = compileMethod(NULL, compilee, optLevel, rc);
+   if (startPC)
+      {
+      iseq_jit_body_info *body_info =  ALLOC(iseq_jit_body_info);
+      assert(body_info && "Failed to allocate body_info");
 
-   return compileMethod(NULL, compilee, optLevel, rc);
+      body_info->opt_level = optLevel;
+      body_info->startPC = startPC;
+
+      /* Set up body to prepare for recompilation. 
+       */
+      body_info->recomp_count = TR::Options::getCmdLineOptions()->getInitialCount();
+      body_info->invoke_count = 0;
+      body_info->prev = NULL;
+      body_info->next = iseq->jit.body_info;
+
+      if (iseq->jit.body_info) {
+         iseq->jit.body_info->prev = body_info;
+      }
+
+      iseq->jit.body_info = body_info;
+      iseq->jit.u.code  = body_info->startPC;
+
+      // It will be important the state transition happens last 
+      // when doing asynchronous compilation.
+      iseq->jit.state = ISEQ_JIT_STATE_JITTED;
+      return Qtrue; 
+      }
+   else 
+      {
+      if (iseq->jit.state == ISEQ_JIT_STATE_JITTED) {
+            /* unable to recompile - never attempt again */
+            iseq->jit.state = ISEQ_JIT_STATE_RECOMP_BLACKLISTED;
+            return Qtrue;
+        }
+        else {
+            /* unable to compile - never attempt again */
+            iseq->jit.state = ISEQ_JIT_STATE_BLACKLISTED;
+            return Qfalse;
+        }
+      }
+   }
+
+#define async_trace(...) if (getenv("ASYNC_COMPILATION_TRACE")) { TR_VerboseLog::writeLineLocked(TR_Vlog_INFO, __VA_ARGS__); } 
+
+static int compilation_thread_started = 0; 
+void unblock_compilation_thread(void* arg) { 
+   async_trace("Unblock called!, arg address is %p", arg);
+   *(int*)arg  = 0; // interrupt compilation thread. 
+}
+
+void* vm_compile_thread(void *vm) { 
+   async_trace("invoked compile thread"); 
+   while (compilation_thread_started) {
+      TR_RubyFE &fe = TR_RubyFE::singleton();
+      TR::CompilationRequest req; 
+      if (fe.getCompilationQueue().pop(req)) {
+         auto repr = req.to_string().c_str(); 
+         if (TR::Options::getCmdLineOptions()->getVerboseOption(TR_VerboseOptions))
+            {
+            TR_VerboseLog::writeLineLocked(TR_Vlog_DISPATCH, "Popped %s for compilation", repr); 
+            }
+         compileRubyISeq(req.iseq, req.name, req.optLevel);
+      } else { // Queue is empty. Sleep. 
+               // Perhaps a better answer here would be the queue sleeping until insertion. 
+         std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      }
+   }
+   async_trace("compilation thread stopped. Returning NULL"); 
+   return NULL; 
+}
+/**
+ * Release the GVL then start compilation thread.
+ */
+VALUE releaseGVLandStartCompilationThread(rb_vm_t* vm)
+   {
+   async_trace( "inside %s, compilationThread address is %p",__FUNCTION__, &compilation_thread_started); 
+   compilation_thread_started = 1;
+   rb_thread_call_without_gvl2(vm_compile_thread,             /* func */ 
+                              (void*)vm,                     /* func arg */   
+                              unblock_compilation_thread,    /* unblock func */
+                              &compilation_thread_started);  /* unblock arg */
+   async_trace( "inside %s, rb_thread_call_without_gvl has returned. Returning Qnil",__FUNCTION__); 
+   return Qnil;
+   }
+
+/**
+ *  deque compilations
+ */
+void dequeCompilations(TR_RubyFE& fe, const rb_iseq_t* iseq)
+   {
+   auto predicate = [iseq](TR::CompilationRequest t) -> bool {
+      if (t.iseq == iseq) {
+         async_trace("queue filter found %p iseq", iseq); 
+         return true;
+      }
+      return false;
+   };
+   fe.getCompilationQueue().predicateFilter(predicate); 
+   }
+
+/**
+ * interrupt compilations
+ */
+void interruptCompilations(TR_RubyFE& fe, const rb_iseq_t* iseq)
+   {
+   auto selection_predicate = [iseq](const TR::Compilation* c) -> bool
+      { 
+      async_trace("is comp: %s", c->isCompilationFor(iseq) ? "true" : "false"); 
+      return c->isCompilationFor(iseq); 
+      }; 
+
+   auto mutator             = [iseq](TR::Compilation* c)
+      {
+      async_trace("Interrupting compilation"); 
+      c->interruptCompilation();
+      }; 
+
+   async_trace("Starting compilation interrupt");
+   fe.getCompilationRegistry().mutateSelectedCompilations(selection_predicate, mutator); 
+   }
+
+/**
+ * Need to unqueue compilations, as well as interrupt any in progress.
+ */
+void dequeCompilationsAndInterruptExecutingCompilations(const rb_iseq_t* iseq) 
+   {
+   TR_RubyFE &fe = TR_RubyFE::singleton();
+   async_trace("Filtering out %p from queues, and killing in progress compilations", iseq); 
+
+   // Filter the queue first, to avoid starting a new (doomed) compilation
+   dequeCompilations(fe,     iseq); 
+
+   async_trace("Dequed compilation, starting interrupt");
+   // Then interrupt compilations. 
+   interruptCompilations(fe, iseq); 
    }
 
 extern "C"
@@ -321,8 +462,6 @@ void jit_terminate(rb_vm_t *vm)
  */
 VALUE jit_compile(rb_iseq_t *iseq)
    {
-   VALUE has_body_to_execute = Qfalse;
-   void *startPC = NULL;
    TR_Hotness optLevel = cold;
 
    int32_t len =
@@ -331,19 +470,12 @@ VALUE jit_compile(rb_iseq_t *iseq)
       RSTRING_LEN(iseq->body->location.label) +
       3;                                    // two colons and a null terminator
 
-   // FIXME: use std::string when it becomes possible
-   char *name = (char*) malloc(len);
-   auto truncated       = false;
-   auto written         = snprintf(name, len, "%s:%ld:%s",
-           (char*) RSTRING_PTR(iseq->body->location.path),
-           FIX2LONG(iseq->body->location.first_lineno),
-           (char* )RSTRING_PTR(iseq->body->location.label));
-
-   if (written > len)
-      {
-      truncated = true;
-      name[len - 1] = '\0'; //Null terminate truncated string.
-      }
+   std::string name =   
+           std::string((char*) RSTRING_PTR(iseq->body->location.path)) + 
+           ":" + 
+           std::to_string(FIX2LONG(iseq->body->location.first_lineno)) + 
+           ":" 
+           + (char* )RSTRING_PTR(iseq->body->location.label);
 
    // Prevent recompiling more than once:
    // If we have a chain of two body_info structs
@@ -353,13 +485,11 @@ VALUE jit_compile(rb_iseq_t *iseq)
        && iseq->jit.body_info->next)
       {
       if (TR::Options::getCmdLineOptions()->getVerboseOption(TR_VerboseOptions))
-         TR_VerboseLog::writeLineLocked(TR_Vlog_INFO,"%s%s @ %p already compiled twice, not compiling again",
-                                        name,
-                                        truncated ? "(truncated)" : "",
+         TR_VerboseLog::writeLineLocked(TR_Vlog_INFO,"%s @ %p already compiled twice, not compiling again",
+                                        name.c_str(),
                                         iseq->jit.body_info->startPC);
 
-      has_body_to_execute = Qtrue;
-      goto cleanupAndExit;
+      return Qtrue;
       }
 
    if ((iseq->body->param.flags.has_opt
@@ -374,10 +504,9 @@ VALUE jit_compile(rb_iseq_t *iseq)
       if (TR::Options::getVerboseOption(TR_VerboseOptions))
          {
          TR_VerboseLog::writeLineLocked(TR_Vlog_COMPFAIL,
-            "<JIT: %s %s cannot be translated: complex arguments:"
+            "<JIT: %s cannot be translated: complex arguments:"
             " opts %d rest %d post %d block %d keywords %d kwrest %d>\n",
-            name,
-            truncated ? "(truncated)" : "",
+            name.c_str(),
             iseq->body->param.flags.has_opt,
             iseq->body->param.flags.has_rest,
             iseq->body->param.flags.has_post,
@@ -385,55 +514,27 @@ VALUE jit_compile(rb_iseq_t *iseq)
             iseq->body->param.flags.has_kw,
             iseq->body->param.flags.has_kwrest);
          }
-      goto cleanupAndExit;
+      /* unable to compile - never attempt again */
+      iseq->jit.state = ISEQ_JIT_STATE_BLACKLISTED;
+      return Qfalse; 
       }
 
-   startPC = compileRubyISeq(iseq, name, optLevel);
-
-   if (startPC)
+   // If we're not compiling async, block and compile immediately here.
+   if (TR::Options::getCmdLineOptions()->getOption(TR_DisableAsyncCompilation))
       {
-      iseq_jit_body_info *body_info =  ALLOC(iseq_jit_body_info);
-      assert(body_info && "Failed to allocate body_info");
-
-      body_info->opt_level = optLevel;
-      body_info->startPC = startPC;
-
-      /* Set up body to prepare for recompilation. 
-       */
-      body_info->recomp_count = TR::Options::getCmdLineOptions()->getInitialCount();
-      body_info->invoke_count = 0;
-      body_info->prev = NULL;
-      body_info->next = iseq->jit.body_info;
-
-      if (iseq->jit.body_info) {
-         iseq->jit.body_info->prev = body_info;
+      return compileRubyISeq(iseq, name, optLevel);
       }
-
-      iseq->jit.body_info = body_info;
-      iseq->jit.u.code  = body_info->startPC;
-
-      // It will be important the state transition happens last 
-      // when doing asynchronous compilation.
-      iseq->jit.state = ISEQ_JIT_STATE_JITTED;
-      has_body_to_execute= Qtrue;
-      }
-   else 
+   else  // Otherwise, queue the compilation. 
       {
-      if (iseq->jit.state == ISEQ_JIT_STATE_JITTED) {
-            /* unable to recompile - never attempt again */
-            iseq->jit.state = ISEQ_JIT_STATE_RECOMP_BLACKLISTED;
-            return Qtrue;
-        }
-        else {
-            /* unable to compile - never attempt again */
-            iseq->jit.state = ISEQ_JIT_STATE_BLACKLISTED;
-            return Qfalse;
-        }
+      TR_RubyFE &fe = TR_RubyFE::singleton();
+      // This state transition must happen before queing, or else 
+      // we could trample the ISEQ_JIT_STATE_JITTED setting when
+      // the compilation completes under adversarial scheduling of
+      // threads.  
+      iseq->jit.state = ISEQ_JIT_STATE_QUEUED;
+      fe.getCompilationQueue().enqueue(TR::CompilationRequest(iseq,name,optLevel));
+      return Qfalse; //Assume we haven't compiled the method between queueing and returning.
       }
-
-cleanupAndExit:
-   free(name);
-   return has_body_to_execute;
    }
 
 
@@ -468,7 +569,10 @@ void jit_crash(void*)
 VALUE jit_update_state(rb_thread_t* th, const rb_iseq_t* iseq_const)
    { 
    if (iseq_const->jit.state == ISEQ_JIT_STATE_JITTED) 
-       return Qtrue; 
+      return Qtrue; 
+   
+   if (iseq_const->jit.state == ISEQ_JIT_STATE_QUEUED)
+      return Qfalse; 
 
    if (iseq_const->jit.state == ISEQ_JIT_STATE_RECOMP_BLACKLISTED)
       return Qtrue;
@@ -505,6 +609,26 @@ VALUE jit_update_state(rb_thread_t* th, const rb_iseq_t* iseq_const)
       }
 
     return Qfalse; /* not jitted yet */
+   }
+
+void jit_create_compilation_thread(rb_vm_t* vm) 
+   {
+   typedef VALUE (*thread_function)(ANYARGS);
+   async_trace("calling thread create");
+   rb_thread_create(reinterpret_cast<thread_function>(releaseGVLandStartCompilationThread),vm);
+   async_trace("Thread create returned");
+   }
+
+/**
+ * Handle invoked by the garbage collector when an iseq is being freed. We need
+ * to ensure that we remove this iseq from the compilation queue, and terminate
+ * any compilations that may be in progres.
+ */
+void jit_iseq_free(const rb_iseq_t* iseq)
+   {
+   if (TR::Options::getCmdLineOptions()->getVerboseOption(TR_VerboseOptions))
+      TR_VerboseLog::writeLineLocked(TR_Vlog_RECLAMATION, "iseq %p reclaimed",iseq);  
+   dequeCompilationsAndInterruptExecutingCompilations(iseq); 
    }
 
 } /* extern C */

@@ -24,6 +24,7 @@
 #include "il/Node_inlines.hpp"
 #include "optimizer/Inliner.hpp"
 #include "ruby/env/RubyMethod.hpp"
+#include "env/GuardedCall.hpp"
 
 #ifdef RUBY_PROJECT_SPECIFIC
 #include "ruby/config.h" 
@@ -166,7 +167,7 @@ TR_Ruby_SendSimple_CallSite::findCallSiteTarget (TR_CallStack* callStack, TR_Inl
    CALL_INFO  ci = reinterpret_cast<CALL_INFO> (node->getSecondChild()->getAddress());
    CALL_CACHE cc = reinterpret_cast<CALL_CACHE>(node->getThirdChild()->getAddress());
    const rb_callable_method_entry_t *me = cc->me; 
-   const rb_iseq_t *iseq_callee = TR_RubyFE::instance()->getJitInterface()->vm_functions.def_iseq_ptr_f(cc->me->def);
+   const rb_iseq_t *iseq_callee = GVLGuardedCall(TR_RubyFE::instance()->getJitInterface()->vm_functions.def_iseq_ptr_f, cc->me->def);
 
 
    int32_t len =

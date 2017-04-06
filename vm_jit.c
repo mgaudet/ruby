@@ -7,6 +7,9 @@
  */
 
 #include "jit.h" 
+#include "ruby/thread.h"
+#include <unistd.h>
+
 /* for dlopen and dlsym */
 /* FIXME: do this more portably */
 #include <dlfcn.h>
@@ -31,6 +34,7 @@ extern char * get_jit_options();
 /* Forward declare.  */ 
 void verify_jit_callbacks(jit_callback_pointers_t *callbacks); 
 void vm_jit_stack_check(rb_thread_t*, rb_control_frame_t * cfp); 
+
 
 void
 vm_jit_init(rb_vm_t *vm, jit_globals_t globals)
@@ -74,20 +78,27 @@ vm_jit_init(rb_vm_t *vm, jit_globals_t globals)
     jit->update_state_f = dlsym(handle, "jit_update_state");
     jit->dispatch_f     = dlsym(handle, "jit_dispatch");
     jit->crash_f        = dlsym(handle, "jit_crash");
+    jit->iseq_free_f    = dlsym(handle, "jit_iseq_free");
+    jit->create_and_start_compilation_thread_f = dlsym(handle, "jit_create_compilation_thread");
 
     if (!jit->init_f            ||
 	!jit->terminate_f       ||
 	!jit->compile_f         ||
 	!jit->update_state_f    ||
 	!jit->crash_f           ||
-        !jit->dispatch_f   ) {
-	fprintf(stderr, "vm_jit_init: missing symbols in %s: init %p, terminate %p, compile %p, dispatch %p crash %p\n",
+        !jit->dispatch_f        ||
+        !jit->iseq_free_f       ||
+        !jit->create_and_start_compilation_thread_f
+        ) {
+	fprintf(stderr, "vm_jit_init: missing symbols in %s: init %p, terminate %p, compile %p, dispatch %p crash %p update_state %p create_and_start_compilation_thread %p\n",
                 dll_name,
                 jit->init_f,
                 jit->terminate_f,
                 jit->compile_f,
                 jit->dispatch_f,
-                jit->crash_f
+                jit->crash_f,
+                jit->update_state_f,
+                jit->create_and_start_compilation_thread_f
                 );
 	goto symbol_problem;
     }
@@ -182,6 +193,8 @@ vm_jit_init(rb_vm_t *vm, jit_globals_t globals)
 	goto init_problem;
        }
 
+
+    vm->jit->create_and_start_compilation_thread_f(vm); 
     return;
 
   init_problem:
