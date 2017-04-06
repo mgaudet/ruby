@@ -3468,7 +3468,7 @@ vm_jit_compile_method(VALUE klass, VALUE method)
 
    if (!NIL_P(iseq)) {
       th   = GET_THREAD();
-      return vm_jit(th, rb_iseqw_to_iseq(iseq));   
+      return th->vm->jit->compile_f(rb_iseqw_to_iseq(iseq));   
    }
 #endif
    return Qfalse; 
