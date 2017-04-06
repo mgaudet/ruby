@@ -1702,8 +1702,8 @@ hook_before_rewind(rb_thread_t *th, rb_control_frame_t *cfp, int will_finish_vm_
 static inline VALUE
 vm_exec2(rb_thread_t *th, VALUE initial)
 {
-    VALUE result;
 #if defined(JIT_OMR)
+    VALUE result;
     /* The OMR JIT is currently not able to support invocations of methods with a
      * frame type of RESCUE.
      *
@@ -1729,12 +1729,13 @@ vm_exec2(rb_thread_t *th, VALUE initial)
         VM_FRAME_FINISHED_P(th->cfp) && 
         vm_jitted_p(th, (rb_iseq_t*)th->cfp->iseq) == Qtrue) {  //Cast away constness for compiler  -- FIXME: May require redesign. 
 	result = vm_exec_jitted(th);
-    }
-    else
-#endif
-	/* warning: dangling else above */
+    } else {
 	result = vm_exec_core(th, initial);
+    }
     return result;
+#else 
+    return vm_exec_core(th, initial);
+#endif
 }
 
 static VALUE
