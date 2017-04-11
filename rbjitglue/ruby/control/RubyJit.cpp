@@ -25,9 +25,11 @@
 #include "env/VMHeaders.hpp"
 #include "ruby/version.h"
 #include "ruby/config.h"
+#include "ruby/thread.h"
 #include "env/CompilerEnv.hpp"
 #include "env/RawAllocator.hpp"
 #include "ras/DebugCounter.hpp"
+#include <string>
 
 extern void setupCodeCacheParameters(int32_t *, OMR::CodeCacheCodeGenCallbacks *callBacks, int32_t *numHelpers, int32_t *CCPreLoadedCodeSize);
 typedef VALUE (*jit_method_t)(rb_thread_t*);
@@ -274,13 +276,81 @@ int jitTerminate(void *)
    return 0;
    }
 
-void *compileRubyISeq(rb_iseq_t *iseq, const char *name, TR_Hotness optLevel)
+#define async_trace(...) if (getenv("ASYNC_COMPILATION_TRACE")) { fprintf(stderr, __VA_ARGS__); } 
+
+static int compilation_thread_started = 0; 
+void unblock_compilation_thread(void* arg) { 
+   async_trace("Unblock called!");
+   *(int*)arg  = 0; // interrupt compilation thread. 
+}
+
+void* vm_compile_thread(void *vm) { 
+   while (compilation_thread_started) {
+      sleep(1); 
+      async_trace( "'compiled' %s\n",__FUNCTION__); 
+   }
+   return NULL; 
+}
+/**
+ * Release the GVL then start compilation thread.
+ */
+VALUE releaseGVLandStartCompilationThread(rb_vm_t* vm)
+   {
+   async_trace( "inside %s\n",__FUNCTION__); 
+   compilation_thread_started = 1;
+   rb_thread_call_without_gvl(vm_compile_thread,             /* func */ 
+                              (void*)vm,                     /* func arg */   
+                              unblock_compilation_thread,    /* unblock func */
+                              &compilation_thread_started);  /* unblock arg */
+   return Qnil;
+   }
+
+VALUE compileRubyISeq(rb_iseq_t *iseq, std::string name, TR_Hotness optLevel)
    {
    int32_t rc = 0;
-   RubyMethodBlock mb(iseq, name);
+   RubyMethodBlock mb(iseq, name.c_str()); //OK, as lifetime is shorter than param. 
    ResolvedRubyMethod compilee(mb);
+   void * startPC = compileMethod(NULL, compilee, optLevel, rc);
+   if (startPC)
+      {
+      iseq_jit_body_info *body_info =  ALLOC(iseq_jit_body_info);
+      assert(body_info && "Failed to allocate body_info");
 
-   return compileMethod(NULL, compilee, optLevel, rc);
+      body_info->opt_level = optLevel;
+      body_info->startPC = startPC;
+
+      /* Set up body to prepare for recompilation. 
+       */
+      body_info->recomp_count = TR::Options::getCmdLineOptions()->getInitialCount();
+      body_info->invoke_count = 0;
+      body_info->prev = NULL;
+      body_info->next = iseq->jit.body_info;
+
+      if (iseq->jit.body_info) {
+         iseq->jit.body_info->prev = body_info;
+      }
+
+      iseq->jit.body_info = body_info;
+      iseq->jit.u.code  = body_info->startPC;
+
+      // It will be important the state transition happens last 
+      // when doing asynchronous compilation.
+      iseq->jit.state = ISEQ_JIT_STATE_JITTED;
+      return Qtrue; 
+      }
+   else 
+      {
+      if (iseq->jit.state == ISEQ_JIT_STATE_JITTED) {
+            /* unable to recompile - never attempt again */
+            iseq->jit.state = ISEQ_JIT_STATE_RECOMP_BLACKLISTED;
+            return Qtrue;
+        }
+        else {
+            /* unable to compile - never attempt again */
+            iseq->jit.state = ISEQ_JIT_STATE_BLACKLISTED;
+            return Qfalse;
+        }
+      }
    }
 
 extern "C"
@@ -321,8 +391,6 @@ void jit_terminate(rb_vm_t *vm)
  */
 VALUE jit_compile(rb_iseq_t *iseq)
    {
-   VALUE has_body_to_execute = Qfalse;
-   void *startPC = NULL;
    TR_Hotness optLevel = cold;
 
    int32_t len =
@@ -331,19 +399,12 @@ VALUE jit_compile(rb_iseq_t *iseq)
       RSTRING_LEN(iseq->body->location.label) +
       3;                                    // two colons and a null terminator
 
-   // FIXME: use std::string when it becomes possible
-   char *name = (char*) malloc(len);
-   auto truncated       = false;
-   auto written         = snprintf(name, len, "%s:%ld:%s",
-           (char*) RSTRING_PTR(iseq->body->location.path),
-           FIX2LONG(iseq->body->location.first_lineno),
-           (char* )RSTRING_PTR(iseq->body->location.label));
-
-   if (written > len)
-      {
-      truncated = true;
-      name[len - 1] = '\0'; //Null terminate truncated string.
-      }
+   std::string name =   
+           std::string((char*) RSTRING_PTR(iseq->body->location.path)) + 
+           ":" + 
+           std::to_string(FIX2LONG(iseq->body->location.first_lineno)) + 
+           ":" 
+           + (char* )RSTRING_PTR(iseq->body->location.label);
 
    // Prevent recompiling more than once:
    // If we have a chain of two body_info structs
@@ -353,13 +414,11 @@ VALUE jit_compile(rb_iseq_t *iseq)
        && iseq->jit.body_info->next)
       {
       if (TR::Options::getCmdLineOptions()->getVerboseOption(TR_VerboseOptions))
-         TR_VerboseLog::writeLineLocked(TR_Vlog_INFO,"%s%s @ %p already compiled twice, not compiling again",
-                                        name,
-                                        truncated ? "(truncated)" : "",
+         TR_VerboseLog::writeLineLocked(TR_Vlog_INFO,"%s @ %p already compiled twice, not compiling again",
+                                        name.c_str(),
                                         iseq->jit.body_info->startPC);
 
-      has_body_to_execute = Qtrue;
-      goto cleanupAndExit;
+      return Qtrue;
       }
 
    if ((iseq->body->param.flags.has_opt
@@ -374,10 +433,9 @@ VALUE jit_compile(rb_iseq_t *iseq)
       if (TR::Options::getVerboseOption(TR_VerboseOptions))
          {
          TR_VerboseLog::writeLineLocked(TR_Vlog_COMPFAIL,
-            "<JIT: %s %s cannot be translated: complex arguments:"
+            "<JIT: %s cannot be translated: complex arguments:"
             " opts %d rest %d post %d block %d keywords %d kwrest %d>\n",
-            name,
-            truncated ? "(truncated)" : "",
+            name.c_str(),
             iseq->body->param.flags.has_opt,
             iseq->body->param.flags.has_rest,
             iseq->body->param.flags.has_post,
@@ -385,55 +443,12 @@ VALUE jit_compile(rb_iseq_t *iseq)
             iseq->body->param.flags.has_kw,
             iseq->body->param.flags.has_kwrest);
          }
-      goto cleanupAndExit;
+      /* unable to compile - never attempt again */
+      iseq->jit.state = ISEQ_JIT_STATE_BLACKLISTED;
+      return Qfalse; 
       }
 
-   startPC = compileRubyISeq(iseq, name, optLevel);
-
-   if (startPC)
-      {
-      iseq_jit_body_info *body_info =  ALLOC(iseq_jit_body_info);
-      assert(body_info && "Failed to allocate body_info");
-
-      body_info->opt_level = optLevel;
-      body_info->startPC = startPC;
-
-      /* Set up body to prepare for recompilation. 
-       */
-      body_info->recomp_count = TR::Options::getCmdLineOptions()->getInitialCount();
-      body_info->invoke_count = 0;
-      body_info->prev = NULL;
-      body_info->next = iseq->jit.body_info;
-
-      if (iseq->jit.body_info) {
-         iseq->jit.body_info->prev = body_info;
-      }
-
-      iseq->jit.body_info = body_info;
-      iseq->jit.u.code  = body_info->startPC;
-
-      // It will be important the state transition happens last 
-      // when doing asynchronous compilation.
-      iseq->jit.state = ISEQ_JIT_STATE_JITTED;
-      has_body_to_execute= Qtrue;
-      }
-   else 
-      {
-      if (iseq->jit.state == ISEQ_JIT_STATE_JITTED) {
-            /* unable to recompile - never attempt again */
-            iseq->jit.state = ISEQ_JIT_STATE_RECOMP_BLACKLISTED;
-            return Qtrue;
-        }
-        else {
-            /* unable to compile - never attempt again */
-            iseq->jit.state = ISEQ_JIT_STATE_BLACKLISTED;
-            return Qfalse;
-        }
-      }
-
-cleanupAndExit:
-   free(name);
-   return has_body_to_execute;
+   return compileRubyISeq(iseq, name, optLevel);
    }
 
 
@@ -505,6 +520,12 @@ VALUE jit_update_state(rb_thread_t* th, const rb_iseq_t* iseq_const)
       }
 
     return Qfalse; /* not jitted yet */
+   }
+
+void jit_create_compilation_thread(rb_vm_t* vm) 
+   {
+   typedef VALUE (*thread_function)(ANYARGS);
+   rb_thread_create(reinterpret_cast<thread_function>(releaseGVLandStartCompilationThread),vm);
    }
 
 } /* extern C */

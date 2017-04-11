@@ -8,6 +8,7 @@
 
 #include "jit.h" 
 #include "ruby/thread.h"
+#include <unistd.h>
 
 /* for dlopen and dlsym */
 /* FIXME: do this more portably */
@@ -34,35 +35,6 @@ extern char * get_jit_options();
 void verify_jit_callbacks(jit_callback_pointers_t *callbacks); 
 void vm_jit_stack_check(rb_thread_t*, rb_control_frame_t * cfp); 
 
-
-#define async_trace(...) if (getenv("ASYNC_COMPILATION_TRACE")) { fprintf(stderr, __VA_ARGS__); } 
-
-static int compilation_thread_started = 0; 
-void unblock_compilation_thread(void* arg) { 
-   *(int*)arg  = 0; // interrupt compilation thread. 
-}
-
-void* vm_compile_thread(void *vm) { 
-   fprintf(stderr, "inside %s\n",__FUNCTION__); 
-   return NULL; 
-}
-
-VALUE vm_jit_compilation_thread_kickoff(void *arg) { 
-   rb_vm_t* vm = (rb_vm_t*)arg;
-   async_trace("%s started\n", __FUNCTION__ );
-   compilation_thread_started = 1; 
-   while (compilation_thread_started) {
-      rb_thread_call_without_gvl(vm_compile_thread,             /* func */ 
-                                 (void*)vm,                     /* func arg */   
-                                 unblock_compilation_thread,    /* unblock func */
-                                 &compilation_thread_started);  /* unblock arg */
-
-      async_trace("compile iter finished; sleeping\n");
-      rb_thread_wait_for(rb_time_interval(DBL2NUM(0.1)));
-   }
-   async_trace("%s Ended\n", __FUNCTION__);
-   return Qnil;
-} 
 
 void
 vm_jit_init(rb_vm_t *vm, jit_globals_t globals)
@@ -106,20 +78,25 @@ vm_jit_init(rb_vm_t *vm, jit_globals_t globals)
     jit->update_state_f = dlsym(handle, "jit_update_state");
     jit->dispatch_f     = dlsym(handle, "jit_dispatch");
     jit->crash_f        = dlsym(handle, "jit_crash");
+    jit->create_and_start_compilation_thread_f = dlsym(handle, "jit_create_compilation_thread");
 
     if (!jit->init_f            ||
 	!jit->terminate_f       ||
 	!jit->compile_f         ||
 	!jit->update_state_f    ||
 	!jit->crash_f           ||
-        !jit->dispatch_f   ) {
-	fprintf(stderr, "vm_jit_init: missing symbols in %s: init %p, terminate %p, compile %p, dispatch %p crash %p\n",
+        !jit->dispatch_f        ||
+        !jit->create_and_start_compilation_thread_f
+        ) {
+	fprintf(stderr, "vm_jit_init: missing symbols in %s: init %p, terminate %p, compile %p, dispatch %p crash %p update_state %p create_and_start_compilation_thread %p\n",
                 dll_name,
                 jit->init_f,
                 jit->terminate_f,
                 jit->compile_f,
                 jit->dispatch_f,
-                jit->crash_f
+                jit->crash_f,
+                jit->update_state_f,
+                jit->create_and_start_compilation_thread_f
                 );
 	goto symbol_problem;
     }
@@ -214,8 +191,8 @@ vm_jit_init(rb_vm_t *vm, jit_globals_t globals)
 	goto init_problem;
        }
 
-    rb_thread_create(vm_jit_compilation_thread_kickoff,vm);
 
+    vm->jit->create_and_start_compilation_thread_f(vm); 
     return;
 
   init_problem:
