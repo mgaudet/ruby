@@ -315,9 +315,13 @@ void jit_terminate(rb_vm_t *vm)
    jitTerminate(vm);
    }
 
-void *jit_compile(rb_iseq_t *iseq)
+/**
+ * Return Qtrue if execution can proceed when this function returns. Otherwise, 
+ * return false, and update the iseq jit states. 
+ */
+VALUE jit_compile(rb_iseq_t *iseq)
    {
-   iseq_jit_body_info *body_info = NULL;
+   VALUE has_body_to_execute = Qfalse;
    void *startPC = NULL;
    TR_Hotness optLevel = cold;
 
@@ -354,10 +358,9 @@ void *jit_compile(rb_iseq_t *iseq)
                                         truncated ? "(truncated)" : "",
                                         iseq->jit.body_info->startPC);
 
-      return NULL;
+      has_body_to_execute = Qtrue;
+      goto cleanupAndExit;
       }
-
-   auto &fe = TR_RubyFE::singleton();
 
    if ((iseq->body->param.flags.has_opt
          && feGetEnv("TR_DISABLE_OPTIONAL_ARGUMENTS"))   ||
@@ -389,16 +392,48 @@ void *jit_compile(rb_iseq_t *iseq)
 
    if (startPC)
       {
-      body_info = ALLOC(iseq_jit_body_info);
+      iseq_jit_body_info *body_info =  ALLOC(iseq_jit_body_info);
       assert(body_info && "Failed to allocate body_info");
 
       body_info->opt_level = optLevel;
       body_info->startPC = startPC;
+
+      /* Set up body to prepare for recompilation. 
+       */
+      body_info->recomp_count = TR::Options::getCmdLineOptions()->getInitialCount();
+      body_info->invoke_count = 0;
+      body_info->prev = NULL;
+      body_info->next = iseq->jit.body_info;
+
+      if (iseq->jit.body_info) {
+         iseq->jit.body_info->prev = body_info;
+      }
+
+      iseq->jit.body_info = body_info;
+      iseq->jit.u.code  = body_info->startPC;
+
+      // It will be important the state transition happens last 
+      // when doing asynchronous compilation.
+      iseq->jit.state = ISEQ_JIT_STATE_JITTED;
+      has_body_to_execute= Qtrue;
+      }
+   else 
+      {
+      if (iseq->jit.state == ISEQ_JIT_STATE_JITTED) {
+            /* unable to recompile - never attempt again */
+            iseq->jit.state = ISEQ_JIT_STATE_RECOMP_BLACKLISTED;
+            return Qtrue;
+        }
+        else {
+            /* unable to compile - never attempt again */
+            iseq->jit.state = ISEQ_JIT_STATE_BLACKLISTED;
+            return Qfalse;
+        }
       }
 
 cleanupAndExit:
    free(name);
-   return (void *)body_info;
+   return has_body_to_execute;
    }
 
 
@@ -423,6 +458,53 @@ VALUE jit_dispatch(rb_thread_t *th, jit_method_t code)
 void jit_crash(void*) 
    {
    jitCrashReport();
+   }
+
+/**
+ * Return Qtrue if there is a body to execute.
+ *
+ * Otherwise, update the states for this method. 
+ */
+VALUE jit_update_state(rb_thread_t* th, const rb_iseq_t* iseq_const)
+   { 
+   if (iseq_const->jit.state == ISEQ_JIT_STATE_JITTED) 
+       return Qtrue; 
+
+   if (iseq_const->jit.state == ISEQ_JIT_STATE_RECOMP_BLACKLISTED)
+      return Qtrue;
+
+   if (iseq_const->jit.state == ISEQ_JIT_STATE_BLACKLISTED)
+      return Qfalse;
+
+   rb_iseq_t* iseq = (rb_iseq_t*)iseq_const; 
+   if (iseq_const->jit.state == ISEQ_JIT_STATE_JITTED)
+      {
+      if (th->vm->jit->options & TIERED_COMPILATION)
+         {
+         --iseq_const->jit.body_info->recomp_count;
+         if (iseq_const->jit.body_info->recomp_count < 0)
+            {
+            return jit_compile(iseq);
+            }
+         }
+      return Qtrue;
+      }
+
+   if (iseq->jit.state == ISEQ_JIT_STATE_ZERO)
+      {
+      iseq->jit.u.count = th->vm->jit->default_count;
+      iseq->jit.state = ISEQ_JIT_STATE_INTERPRETED;
+      iseq->jit.body_info = NULL;
+      }
+
+   --iseq->jit.u.count;
+
+   if (iseq_const->jit.u.count < 0)
+      {
+      return jit_compile(iseq);
+      }
+
+    return Qfalse; /* not jitted yet */
    }
 
 } /* extern C */

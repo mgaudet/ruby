@@ -151,8 +151,22 @@ struct rb_jit_struct {
    /** Terminate the JIT for the given VM */  
     void  (*terminate_f)(rb_vm_t *vm);
 
-   /** Compile a given instruction sequence */  
-    void* (*compile_f)(const rb_iseq_t *iseq);
+   /**
+    * Compile a given instruction sequence
+    *
+    * Return Qtrue if the body can be excuted 
+    * after return, and Qfalse otherwise.
+    */  
+    VALUE (*compile_f)(rb_iseq_t *iseq);
+
+    /**
+     * Updates the invocation information
+     * for the JIT, potentially triggering or queuing compilation
+     *
+     * Returns Qtrue if the body can be 
+     * executed, and Qfalse otherwise. 
+     */
+    VALUE (*update_state_f)(rb_thread_t*, const rb_iseq_t* iseq); 
 
    /** JIT crash Handler  */  
     void (*crash_f)(void);
@@ -177,10 +191,5 @@ void  vm_jit_init   (rb_vm_t *vm, jit_globals_t globals);
  * Destroy the JIT for a VM
  */
 void  vm_jit_destroy(rb_vm_t *vm);
-
-/**
- * Compile an instruction sequence
- */
-void *vm_jit_compile(rb_vm_t *vm, const rb_iseq_t *iseq);
 
 #endif
