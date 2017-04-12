@@ -31,7 +31,7 @@ Ruby::CodeCacheManager::self()
 
 
 TR_RubyFE *
-Ruby::CodeCacheManager::pyfe()
+Ruby::CodeCacheManager::rbfe()
    {
    return reinterpret_cast<TR_RubyFE *>(self()->fe());
    }
@@ -40,7 +40,7 @@ Ruby::CodeCacheManager::pyfe()
 TR::CodeCache *
 Ruby::CodeCacheManager::initialize(bool useConsolidatedCache, uint32_t numberOfCodeCachesToCreateAtStartup)
    {
-   _jitConfig = self()->pyfe()->jitConfig();
+   _jitConfig = self()->rbfe()->jitConfig();
    return self()->OMR::CodeCacheManager::initialize(useConsolidatedCache, numberOfCodeCachesToCreateAtStartup);
    }
 
