@@ -56,7 +56,7 @@ public:
 
    static TR::CodeCacheManager *instance() { return _codeCacheManager; }
    static TR_RubyJitConfig *jitConfig()    { return _jitConfig; }
-   TR_RubyFE *pyfe();
+   TR_RubyFE *rbfe();
 
    TR::CodeCache *initialize(bool useConsolidatedCache, uint32_t numberOfCodeCachesToCreateAtStartup);
 
