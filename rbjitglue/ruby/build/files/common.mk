@@ -229,7 +229,7 @@ JIT_PRODUCT_SOURCE_FILES+=\
     $(JIT_OMR_DIRTY_DIR)/optimizer/VPConstraint.cpp \
     $(JIT_OMR_DIRTY_DIR)/optimizer/VPHandlers.cpp \
     $(JIT_OMR_DIRTY_DIR)/optimizer/VPHandlersCommon.cpp \
-    $(JIT_OMR_DIRTY_DIR)/optimizer/ValuePropagation.cpp \
+    $(JIT_OMR_DIRTY_DIR)/optimizer/OMRValuePropagation.cpp \
     $(JIT_OMR_DIRTY_DIR)/optimizer/ValuePropagationCommon.cpp \
     $(JIT_OMR_DIRTY_DIR)/optimizer/OMRSimplifier.cpp \
     $(JIT_OMR_DIRTY_DIR)/optimizer/OMRSimplifierHelpers.cpp \
