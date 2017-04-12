@@ -33,7 +33,6 @@ JIT_PRODUCT_SOURCE_FILES+=\
     $(JIT_OMR_DIRTY_DIR)/x/codegen/OMRMemoryReference.cpp \
     $(JIT_OMR_DIRTY_DIR)/x/codegen/OpBinary.cpp \
     $(JIT_OMR_DIRTY_DIR)/x/codegen/OpNames.cpp \
-    $(JIT_OMR_DIRTY_DIR)/x/codegen/OpProperties.cpp \
     $(JIT_OMR_DIRTY_DIR)/x/codegen/OutlinedInstructions.cpp \
     $(JIT_OMR_DIRTY_DIR)/x/codegen/RegisterRematerialization.cpp \
     $(JIT_OMR_DIRTY_DIR)/x/codegen/SubtractAnalyser.cpp \
@@ -56,6 +55,7 @@ JIT_PRODUCT_SOURCE_FILES+=\
     $(JIT_OMR_DIRTY_DIR)/x/codegen/OMRRegisterIterator.cpp \
     $(JIT_OMR_DIRTY_DIR)/x/env/OMRDebugEnv.cpp \
     $(JIT_OMR_DIRTY_DIR)/x/env/OMRCPU.cpp \
+    $(JIT_OMR_DIRTY_DIR)/x/codegen/SIMDTreeEvaluator.cpp \
     $(JIT_PRODUCT_DIR)/x/codegen/Evaluator.cpp
 
 
