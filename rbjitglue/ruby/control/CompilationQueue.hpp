@@ -22,6 +22,8 @@
 
 #include <deque> 
 #include "env/VerboseLog.hpp"
+#include "infra/Monitor.hpp"
+#include "infra/CriticalSection.hpp"
 
 namespace TR { 
 
@@ -36,14 +38,18 @@ namespace TR {
 template <typename T> 
 class CompilationQueue { 
    public:
-   CompilationQueue(bool verbose) : _queue(), _verbose(verbose) {} 
+   CompilationQueue(bool verbose) :
+      _queue(),
+      _verbose(verbose),
+      _queueMonitor(TR::Monitor::create("CompilationQueueMonitor"))
+   {} 
    
    void enqueue(T t) {
-      /* Need a mutex here */  
+      OMR::CriticalSection lock(_queueMonitor); 
       if (_verbose) 
          {
          auto repr = t.to_string().c_str(); 
-         TR_VerboseLog::writeLineLocked(TR_Vlog_INFO, "QUEUING %s for compilation (queue size after %d)", repr, _queue.size() + 1); 
+         TR_VerboseLog::writeLineLocked(TR_Vlog_INFO, "QUEUE: Added  %s for compilation (queue size after %d)", repr, _queue.size() + 1); 
          }
       _queue.emplace_back(t);
    }
@@ -56,14 +62,14 @@ class CompilationQueue {
     * to derference the parameter
     */
    bool pop(T& ret) { 
-      /* Need a mutex here */  
+      OMR::CriticalSection lock(_queueMonitor); 
       if (_queue.size() > 0) { 
          ret = _queue.front();
          _queue.pop_front();
          if (_verbose) 
             {
             auto repr = ret.to_string().c_str(); 
-            TR_VerboseLog::writeLineLocked(TR_Vlog_INFO, "%s popped off compilation queue (queue size after %d", repr, _queue.size()); 
+            TR_VerboseLog::writeLineLocked(TR_Vlog_INFO, "QUEUE: popped %s off compilation queue (queue size after %d)", repr, _queue.size()); 
             }
          return true;
       } else { 
@@ -76,7 +82,7 @@ class CompilationQueue {
     */
    size_t size()
       {
-      /* Need a mutex here */  
+      OMR::CriticalSection lock(_queueMonitor); 
       return _queue.size();
       }
 
@@ -84,6 +90,7 @@ class CompilationQueue {
    private: 
    std::deque<T> _queue; 
    bool          _verbose; 
+   TR::Monitor*   _queueMonitor;
 };
 
 }
