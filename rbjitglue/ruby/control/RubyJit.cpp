@@ -343,7 +343,7 @@ void* vm_compile_thread(void *vm) {
          TR_VerboseLog::writeLineLocked(TR_Vlog_DISPATCH, "Popped %s for compilation"); 
          compileRubyISeq(req.iseq, req.name, req.optLevel);
       } else { //Queue is empty. Sleep.
-         rb_thread_wait_for(rb_time_interval(DBL2NUM(0.1)));;
+         rb_thread_wait_for(rb_time_interval(DBL2NUM(0.01)));;
       }
    }
    return NULL; 
