@@ -193,6 +193,9 @@ struct rb_jit_struct {
    /** Dispatch to compiled code. */
     VALUE (*dispatch_f)(rb_thread_t *th, jit_method_t code);
 
+   /** Notify about iseq release */
+    void (*iseq_free_f)(const rb_iseq_t*); 
+
    /*
     * jit->vm interface
     */

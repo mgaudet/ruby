@@ -78,6 +78,27 @@ class CompilationQueue {
    }
 
    /**
+    * Remove every element from the queue that matches the provided predicate. 
+    *
+    * The predicate function returns true if the element is to be removed. The 
+    * predicate needs to be compatible with UnaryPredicate from <algorithms>
+    *
+    * Used to filter out compilations no longer required. 
+    */
+   template <typename CompilationPredicate> 
+   void predicateFilter(CompilationPredicate p) {
+
+      OMR::CriticalSection lock(_queueMonitor); 
+      auto size_before = _queue.size(); 
+      std::remove_if(_queue.begin(), _queue.end(), p);
+      auto size_after  = _queue.size(); 
+
+      TR_VerboseLog::writeLineLocked(TR_Vlog_INFO, "QUEUE: Filtered %d elements from queue",
+                                     size_before - size_after
+                                     ); 
+   }
+
+   /**
     * Return the size of the queue. 
     */
    size_t size()

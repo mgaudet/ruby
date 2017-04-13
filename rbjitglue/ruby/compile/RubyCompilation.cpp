@@ -33,6 +33,7 @@
 #include "optimizer/OptimizationManager.hpp"
 #include <stdint.h>
 #include "compile/ResolvedMethod.hpp"
+#include "env/RubyMethod.hpp"
 
 
 Ruby::Compilation::Compilation(
@@ -54,7 +55,9 @@ Ruby::Compilation::Compilation(
       options,
       dispatchRegion,
       m,
-      optimizationPlan)
+      optimizationPlan),
+   _interrupt_compilation(false),
+   _cached_iseq( ((ResolvedRubyMethod*)compilee)->getRubyMethodBlock().iseq() )
    {
    ((TR_RubyFE*)fe)->getCompilationRegistry().registerCompilation(self()); 
    }
@@ -63,4 +66,17 @@ Ruby::Compilation::Compilation(
 Ruby::Compilation::~Compilation() 
    {
    ((TR_RubyFE*)fe())->getCompilationRegistry().unregisterCompilation(self()); 
+   }
+
+/**
+ * Return true if this is the compilation for the given iseq
+ *
+ * FIXME: I'm caching the iseq in the compilation constructor
+ *        because I can't figure out how to get from
+ *        Compilation to the TR_ResolvedMethod / ResolvedRubyMethod.
+ */
+bool
+Ruby::Compilation::isCompilationFor(const rb_iseq_t* iseq) const
+   {   
+   return iseq == _cached_iseq;
    }

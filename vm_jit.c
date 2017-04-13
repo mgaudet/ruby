@@ -78,6 +78,7 @@ vm_jit_init(rb_vm_t *vm, jit_globals_t globals)
     jit->update_state_f = dlsym(handle, "jit_update_state");
     jit->dispatch_f     = dlsym(handle, "jit_dispatch");
     jit->crash_f        = dlsym(handle, "jit_crash");
+    jit->iseq_free_f    = dlsym(handle, "jit_iseq_free");
     jit->create_and_start_compilation_thread_f = dlsym(handle, "jit_create_compilation_thread");
 
     if (!jit->init_f            ||
@@ -86,6 +87,7 @@ vm_jit_init(rb_vm_t *vm, jit_globals_t globals)
 	!jit->update_state_f    ||
 	!jit->crash_f           ||
         !jit->dispatch_f        ||
+        !jit->iseq_free_f       ||
         !jit->create_and_start_compilation_thread_f
         ) {
 	fprintf(stderr, "vm_jit_init: missing symbols in %s: init %p, terminate %p, compile %p, dispatch %p crash %p update_state %p create_and_start_compilation_thread %p\n",

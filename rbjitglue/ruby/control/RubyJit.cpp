@@ -32,6 +32,7 @@
 #include "env/RawAllocator.hpp"
 #include "ras/DebugCounter.hpp"
 #include <string>
+#include "compile/Compilation.hpp"
 
 extern void setupCodeCacheParameters(int32_t *, OMR::CodeCacheCodeGenCallbacks *callBacks, int32_t *numHelpers, int32_t *CCPreLoadedCodeSize);
 typedef VALUE (*jit_method_t)(rb_thread_t*);
@@ -362,7 +363,44 @@ VALUE releaseGVLandStartCompilationThread(rb_vm_t* vm)
    return Qnil;
    }
 
+/**
+ *  deque compilations
+ */
+void dequeCompilations(TR_RubyFE& fe, const rb_iseq_t* iseq)
+   {
+   auto predicate = [iseq](TR::CompilationRequest t) -> bool { return t.iseq == iseq; };
+   fe.getCompilationQueue().predicateFilter(predicate); 
+   }
 
+/**
+ * interrupt compilations
+ */
+void interruptCompilations(TR_RubyFE& fe, const rb_iseq_t* iseq)
+   {
+   auto selection_predicate = [iseq](const TR::Compilation* c) -> bool
+      { 
+      return c->isCompilationFor(iseq); 
+      }; 
+
+   auto mutator             = [iseq](TR::Compilation* c)
+      {
+      c->interruptCompilation();
+      }; 
+   fe.getCompilationRegistry().mutateSelectedCompilations(selection_predicate, mutator); 
+   }
+
+/**
+ * Need to unqueue compilations, as well as interrupt any in progress.
+ */
+void dequeCompilationsAndInterruptExecutingCompilations(const rb_iseq_t* iseq) 
+   {
+   TR_RubyFE &fe = TR_RubyFE::singleton();
+   // Filter the queue first, to avoid starting a new (doomed) compilation
+   dequeCompilations(fe,     iseq); 
+
+   // Then interrupt compilations. 
+   interruptCompilations(fe, iseq); 
+   }
 
 extern "C"
 {
@@ -555,6 +593,17 @@ void jit_create_compilation_thread(rb_vm_t* vm)
    {
    typedef VALUE (*thread_function)(ANYARGS);
    rb_thread_create(reinterpret_cast<thread_function>(releaseGVLandStartCompilationThread),vm);
+   }
+
+/**
+ * Handle invoked by the garbage collector when an iseq is being freed. We need
+ * to ensure that we remove this iseq from the compilation queue, and terminate
+ * any compilations that may be in progres.
+ */
+void jit_iseq_free(const rb_iseq_t* iseq)
+   {
+   TR_VerboseLog::writeLineLocked(TR_Vlog_RECLAMATION, "iseq %p reclaimed",iseq);  
+   dequeCompilationsAndInterruptExecutingCompilations(iseq); 
    }
 
 } /* extern C */
