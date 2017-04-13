@@ -30,12 +30,14 @@
 #include "optimizer/InlinerFailureReason.hpp"
 #include "ruby/config.h"
 #include "ruby/version.h"
+#include "control/Options.hpp"
 
 TR_RubyFE *TR_RubyFE::_instance = 0;
 
 TR_RubyFE::TR_RubyFE(struct rb_vm_struct *vm)
    : TR::FEBase<TR_RubyFE>(),
-     _vm(vm)
+     _vm(vm),
+     _compilationQueue(true) //Check Verbose options after working.
    {
    TR_ASSERT(!_instance, "TR_RubyFE must be initialized only once");
    _instance = this;

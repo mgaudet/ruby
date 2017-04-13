@@ -26,7 +26,8 @@
 #include "env/jittypes.h"
 #include "runtime/RubyJitConfig.hpp"
 #include "runtime/CodeCache.hpp"
-
+#include "control/CompilationQueue.hpp" 
+#include "control/CompilationRequest.hpp"
 
 class TR_RubyFE;
 
@@ -48,6 +49,12 @@ class TR_RubyFE : public TR::FEBase<TR_RubyFE>
    static TR_RubyFE *_instance;
    struct rb_vm_struct *_vm;
 
+   /** 
+    * The compilation queue. This is going to be processed 
+    * by compilation threads.
+    */
+   TR::CompilationQueue<TR::CompilationRequest> _compilationQueue; 
+
    public:
    // The constructor can only be called once by jitInit
    TR_RubyFE(struct rb_vm_struct *vm);
@@ -67,6 +74,8 @@ class TR_RubyFE : public TR::FEBase<TR_RubyFE>
 
    rb_jit_t *getJitInterface() { return _vm->jit; }
    const char *id2name(ID);
+
+   TR::CompilationQueue<TR::CompilationRequest>& getCompilationQueue() { return _compilationQueue; } 
 
    };
 

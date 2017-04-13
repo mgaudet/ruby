@@ -21,6 +21,8 @@
 #include "control/CompileMethod.hpp"
 #include "control/Options.hpp"
 #include "control/Options_inlines.hpp"
+#include "control/CompilationQueue.hpp" 
+#include "control/CompilationRequest.hpp" 
 #include "env/IO.hpp"
 #include "env/VMHeaders.hpp"
 #include "ruby/version.h"
@@ -276,35 +278,6 @@ int jitTerminate(void *)
    return 0;
    }
 
-#define async_trace(...) if (getenv("ASYNC_COMPILATION_TRACE")) { fprintf(stderr, __VA_ARGS__); } 
-
-static int compilation_thread_started = 0; 
-void unblock_compilation_thread(void* arg) { 
-   async_trace("Unblock called!");
-   *(int*)arg  = 0; // interrupt compilation thread. 
-}
-
-void* vm_compile_thread(void *vm) { 
-   while (compilation_thread_started) {
-      sleep(1); 
-      async_trace( "'compiled' %s\n",__FUNCTION__); 
-   }
-   return NULL; 
-}
-/**
- * Release the GVL then start compilation thread.
- */
-VALUE releaseGVLandStartCompilationThread(rb_vm_t* vm)
-   {
-   async_trace( "inside %s\n",__FUNCTION__); 
-   compilation_thread_started = 1;
-   rb_thread_call_without_gvl(vm_compile_thread,             /* func */ 
-                              (void*)vm,                     /* func arg */   
-                              unblock_compilation_thread,    /* unblock func */
-                              &compilation_thread_started);  /* unblock arg */
-   return Qnil;
-   }
-
 VALUE compileRubyISeq(rb_iseq_t *iseq, std::string name, TR_Hotness optLevel)
    {
    int32_t rc = 0;
@@ -352,6 +325,44 @@ VALUE compileRubyISeq(rb_iseq_t *iseq, std::string name, TR_Hotness optLevel)
         }
       }
    }
+
+#define async_trace(...) if (getenv("ASYNC_COMPILATION_TRACE")) { fprintf(stderr, __VA_ARGS__); } 
+
+static int compilation_thread_started = 0; 
+void unblock_compilation_thread(void* arg) { 
+   async_trace("Unblock called!");
+   *(int*)arg  = 0; // interrupt compilation thread. 
+}
+
+void* vm_compile_thread(void *vm) { 
+   while (compilation_thread_started) {
+      TR_RubyFE &fe = TR_RubyFE::singleton();
+      TR::CompilationRequest req; 
+      if (fe.getCompilationQueue().pop(req)) {
+         auto repr = req.to_string().c_str(); 
+         TR_VerboseLog::writeLineLocked(TR_Vlog_DISPATCH, "Popped %s for compilation"); 
+         compileRubyISeq(req.iseq, req.name, req.optLevel);
+      } else { //Queue is empty. Sleep.
+         rb_thread_wait_for(rb_time_interval(DBL2NUM(0.1)));;
+      }
+   }
+   return NULL; 
+}
+/**
+ * Release the GVL then start compilation thread.
+ */
+VALUE releaseGVLandStartCompilationThread(rb_vm_t* vm)
+   {
+   async_trace( "inside %s\n",__FUNCTION__); 
+   compilation_thread_started = 1;
+   rb_thread_call_without_gvl(vm_compile_thread,             /* func */ 
+                              (void*)vm,                     /* func arg */   
+                              unblock_compilation_thread,    /* unblock func */
+                              &compilation_thread_started);  /* unblock arg */
+   return Qnil;
+   }
+
+
 
 extern "C"
 {
@@ -448,7 +459,22 @@ VALUE jit_compile(rb_iseq_t *iseq)
       return Qfalse; 
       }
 
-   return compileRubyISeq(iseq, name, optLevel);
+   // If we're not compiling async, block and compile immediately here.
+   if (TR::Options::getCmdLineOptions()->getOption(TR_DisableAsyncCompilation))
+      {
+      return compileRubyISeq(iseq, name, optLevel);
+      }
+   else  // Otherwise, queue the compilation. 
+      {
+      TR_RubyFE &fe = TR_RubyFE::singleton();
+      // This state transition must happen before queing, or else 
+      // we could trample the ISEQ_JIT_STATE_JITTED setting when
+      // the compilation completes under adversarial scheduling of
+      // threads.  
+      iseq->jit.state = ISEQ_JIT_STATE_QUEUED;
+      fe.getCompilationQueue().enqueue(TR::CompilationRequest(iseq,name,optLevel));
+      return Qfalse; //Assume we haven't compiled the method between queueing and returning.
+      }
    }
 
 
@@ -483,7 +509,10 @@ void jit_crash(void*)
 VALUE jit_update_state(rb_thread_t* th, const rb_iseq_t* iseq_const)
    { 
    if (iseq_const->jit.state == ISEQ_JIT_STATE_JITTED) 
-       return Qtrue; 
+      return Qtrue; 
+   
+   if (iseq_const->jit.state == ISEQ_JIT_STATE_QUEUED)
+      return Qfalse; 
 
    if (iseq_const->jit.state == ISEQ_JIT_STATE_RECOMP_BLACKLISTED)
       return Qtrue;
