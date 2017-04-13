@@ -21,6 +21,7 @@
 #pragma csect(TEST,"RubyCompilation#T")
 
 #include "compile/Compilation.hpp"
+#include "compile/Compilation_inlines.hpp"
 #include "control/Options.hpp"
 #include "control/Options_inlines.hpp"
 #include "env/TRMemory.hpp"
@@ -55,4 +56,11 @@ Ruby::Compilation::Compilation(
       m,
       optimizationPlan)
    {
+   ((TR_RubyFE*)fe)->getCompilationRegistry().registerCompilation(self()); 
+   }
+
+
+Ruby::Compilation::~Compilation() 
+   {
+   ((TR_RubyFE*)fe())->getCompilationRegistry().unregisterCompilation(self()); 
    }

@@ -60,8 +60,13 @@ class Compilation : public OMR::CompilationConnector
          TR_Memory *,
          TR_OptimizationPlan *optimizationPlan);
 
-   ~Compilation() {}
+   ~Compilation();
 
+   bool compilationShouldBeInterrupted(TR_CallingContext)       { return _interrupt_compilation; }
+   void interruptCompilation()                                  { _interrupt_compilation = true; } 
+
+   private: 
+      bool _interrupt_compilation; 
    };
 
 }
