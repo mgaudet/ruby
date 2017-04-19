@@ -331,11 +331,12 @@ VALUE compileRubyISeq(rb_iseq_t *iseq, std::string name, TR_Hotness optLevel)
 
 static int compilation_thread_started = 0; 
 void unblock_compilation_thread(void* arg) { 
-   async_trace("Unblock called!");
+   async_trace("Unblock called!, arg address is %p", arg);
    *(int*)arg  = 0; // interrupt compilation thread. 
 }
 
 void* vm_compile_thread(void *vm) { 
+   async_trace("invoked compile thread"); 
    while (compilation_thread_started) {
       TR_RubyFE &fe = TR_RubyFE::singleton();
       TR::CompilationRequest req; 
@@ -347,6 +348,7 @@ void* vm_compile_thread(void *vm) {
          rb_thread_wait_for(rb_time_interval(DBL2NUM(0.01)));;
       }
    }
+   async_trace("compilation thread stopped. Returning NULL"); 
    return NULL; 
 }
 /**
@@ -354,12 +356,13 @@ void* vm_compile_thread(void *vm) {
  */
 VALUE releaseGVLandStartCompilationThread(rb_vm_t* vm)
    {
-   async_trace( "inside %s\n",__FUNCTION__); 
+   async_trace( "inside %s, compilationThread address is %p\n",__FUNCTION__, &compilation_thread_started); 
    compilation_thread_started = 1;
-   rb_thread_call_without_gvl(vm_compile_thread,             /* func */ 
+   rb_thread_call_without_gvl2(vm_compile_thread,             /* func */ 
                               (void*)vm,                     /* func arg */   
                               unblock_compilation_thread,    /* unblock func */
                               &compilation_thread_started);  /* unblock arg */
+   async_trace( "inside %s, rb_thread_call_without_gvl has returned. Returning Qnil\n",__FUNCTION__); 
    return Qnil;
    }
 
@@ -592,7 +595,9 @@ VALUE jit_update_state(rb_thread_t* th, const rb_iseq_t* iseq_const)
 void jit_create_compilation_thread(rb_vm_t* vm) 
    {
    typedef VALUE (*thread_function)(ANYARGS);
+   async_trace("calling thread create");
    rb_thread_create(reinterpret_cast<thread_function>(releaseGVLandStartCompilationThread),vm);
+   async_trace("Thread create returned");
    }
 
 /**
