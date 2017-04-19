@@ -18,6 +18,7 @@
 #include "ruby/vm.h"
 #include "vm_core.h"
 #include "probes_helper.h"
+#include "ruby/thread.h"
 
 NORETURN(void rb_raise_jump(VALUE, VALUE));
 
@@ -230,6 +231,51 @@ ruby_cleanup(volatile int ex)
     return sysex;
 }
 
+#define async_trace(...) if (getenv("ASYNC_COMPILATION_TRACE")) { fprintf(stderr, __VA_ARGS__); } 
+
+static int compilation_thread_started = 0; 
+void unblock_compilation_thread(void* arg) { 
+   async_trace("Unblock called!, arg address is %p", arg);
+   *(int*)arg  = 0; // interrupt compilation thread. 
+}
+
+void* vm_compile_thread(void *vm) { 
+   async_trace("invoked compile thread"); 
+   while (compilation_thread_started) {
+         rb_thread_wait_for(rb_time_interval(DBL2NUM(0.01)));;
+   }
+   async_trace("compilation thread stopped. Returning NULL"); 
+   return NULL; 
+}
+/**
+ * Release the GVL then start compilation thread.
+ */
+VALUE releaseGVLandStartCompilationThread(rb_vm_t* vm)
+   {
+   async_trace( "inside %s, compilationThread address is %p\n",__FUNCTION__, &compilation_thread_started); 
+   compilation_thread_started = 1;
+   if (getenv("RELEASE_GVL"))
+      rb_thread_call_without_gvl2(vm_compile_thread,             /* func */ 
+                                 (void*)vm,                     /* func arg */   
+                                 unblock_compilation_thread,    /* unblock func */
+                                 &compilation_thread_started);  /* unblock arg */
+   else 
+      vm_compile_thread(vm); 
+
+   async_trace( "inside %s, rb_thread_call_without_gvl has returned. Returning Qnil\n",__FUNCTION__); 
+   return Qnil;
+   }
+
+void
+kickoff_thread(rb_vm_t* vm) 
+{
+   typedef VALUE (*thread_function)(ANYARGS);
+   async_trace("calling thread create");
+   rb_thread_create((thread_function)(releaseGVLandStartCompilationThread),vm);
+   async_trace("Thread create returned");
+
+}
+
 static int
 ruby_exec_internal(void *n)
 {
@@ -238,6 +284,9 @@ ruby_exec_internal(void *n)
     rb_thread_t *th = GET_THREAD();
 
     if (!n) return 0;
+
+    if (getenv("ASYNC_COMPILATION_TRACE"))
+       kickoff_thread(GET_VM()); 
 
     TH_PUSH_TAG(th);
     if ((state = EXEC_TAG()) == 0) {
