@@ -51,14 +51,12 @@ public:
       {  
       OMR::CriticalSection lock(_registryMonitor); 
       _compilations.push_back(c); 
-      fprintf(stderr, "Registered compilation %p\n", c);
       }
 
    void unregisterCompilation(TR::Compilation* c)
       {  
       OMR::CriticalSection lock(_registryMonitor); 
       _compilations.erase(std::remove(_compilations.begin(), _compilations.end(), c), _compilations.end()); 
-      fprintf(stderr, "unregistered compilation %p\n", c);
       }
 
    /**
