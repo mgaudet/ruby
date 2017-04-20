@@ -32,6 +32,8 @@
 #include "env/RawAllocator.hpp"
 #include "ras/DebugCounter.hpp"
 #include <string>
+#include <thread>
+#include <chrono> 
 #include "compile/Compilation.hpp"
 
 extern void setupCodeCacheParameters(int32_t *, OMR::CodeCacheCodeGenCallbacks *callBacks, int32_t *numHelpers, int32_t *CCPreLoadedCodeSize);
@@ -344,8 +346,9 @@ void* vm_compile_thread(void *vm) {
          auto repr = req.to_string().c_str(); 
          TR_VerboseLog::writeLineLocked(TR_Vlog_DISPATCH, "Popped %s for compilation"); 
          compileRubyISeq(req.iseq, req.name, req.optLevel);
-      } else { //Queue is empty. Sleep.
-         rb_thread_wait_for(rb_time_interval(DBL2NUM(0.01)));;
+      } else { // Queue is empty. Sleep. 
+               // Perhaps a better answer here would be the queue sleeping until insertion. 
+         std::this_thread::sleep_for(std::chrono::milliseconds(10));
       }
    }
    async_trace("compilation thread stopped. Returning NULL"); 
