@@ -344,7 +344,10 @@ void* vm_compile_thread(void *vm) {
       TR::CompilationRequest req; 
       if (fe.getCompilationQueue().pop(req)) {
          auto repr = req.to_string().c_str(); 
-         TR_VerboseLog::writeLineLocked(TR_Vlog_DISPATCH, "Popped %s for compilation"); 
+         if (TR::Options::getCmdLineOptions()->getVerboseOption(TR_VerboseOptions))
+            {
+            TR_VerboseLog::writeLineLocked(TR_Vlog_DISPATCH, "Popped %s for compilation"); 
+            }
          compileRubyISeq(req.iseq, req.name, req.optLevel);
       } else { // Queue is empty. Sleep. 
                // Perhaps a better answer here would be the queue sleeping until insertion. 
@@ -610,7 +613,8 @@ void jit_create_compilation_thread(rb_vm_t* vm)
  */
 void jit_iseq_free(const rb_iseq_t* iseq)
    {
-   TR_VerboseLog::writeLineLocked(TR_Vlog_RECLAMATION, "iseq %p reclaimed",iseq);  
+   if (TR::Options::getCmdLineOptions()->getVerboseOption(TR_VerboseOptions))
+      TR_VerboseLog::writeLineLocked(TR_Vlog_RECLAMATION, "iseq %p reclaimed",iseq);  
    dequeCompilationsAndInterruptExecutingCompilations(iseq); 
    }
 
