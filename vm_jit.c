@@ -29,7 +29,7 @@ extern const char * get_jit_dll_name();
 extern char * get_jit_options(); 
 
 /* Forward declare.  */ 
-void verify_jit_callbacks(jit_callbacks_t *callbacks); 
+void verify_jit_callbacks(jit_callback_pointers_t *callbacks); 
 void vm_jit_stack_check(rb_thread_t*, rb_control_frame_t * cfp); 
 
 void
@@ -160,6 +160,12 @@ vm_jit_init(rb_vm_t *vm, jit_globals_t globals)
 
     verify_jit_callbacks(&jit->callbacks);
 
+    memset(&(jit->vm_functions), 0, sizeof(jit->vm_functions)); 
+    jit->vm_functions.def_iseq_ptr_f           = def_iseq_ptr;
+    jit->vm_functions.rb_id2name_f             = rb_id2name;
+    jit->vm_functions.rb_class2name_f          = rb_class2name;
+    jit->vm_functions.rb_iseq_original_iseq_f  = rb_iseq_original_iseq;
+
     /* Initialize Globals */
     jit->globals = globals;
 
@@ -198,13 +204,13 @@ vm_jit_init(rb_vm_t *vm, jit_globals_t globals)
  * Ensure that all members of the callback struct have been assigned. 
  */
 void 
-verify_jit_callbacks(jit_callbacks_t *callbacks)
+verify_jit_callbacks(jit_callback_pointers_t *callbacks)
 {
    /* Treat the array as a buffer of void pointers 
     */
    unsigned int i = 0;
    void **buffer = (void**)callbacks; 
-   for (; i < sizeof(jit_callbacks_t) / sizeof(void*); i++) {
+   for (; i < sizeof(jit_callback_pointers_t) / sizeof(void*); i++) {
       if (buffer[i] == NULL) {
 	fprintf(stderr, "[FATAL] Un-initialized callback at index %d\n", i);
 	exit(EXIT_FAILURE);

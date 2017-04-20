@@ -248,9 +248,9 @@ TR_InlinerBase::checkInlineableWithoutInitialCalleeSymbol (TR_CallSite* callSite
     */ 
 
    char methodName[64];
-   snprintf(methodName, 64, "%s", TR_RubyFE::instance()->getJitInterface()->callbacks.rb_id2name_f(ci->mid));
+   snprintf(methodName, 64, "%s", TR_RubyFE::instance()->getJitInterface()->vm_functions.rb_id2name_f(ci->mid));
    char klassName[64];
-   snprintf(klassName, 64, "%s", TR_RubyFE::instance()->getJitInterface()->callbacks.rb_class2name_f(me->defined_class));
+   snprintf(klassName, 64, "%s", TR_RubyFE::instance()->getJitInterface()->vm_functions.rb_class2name_f(me->defined_class));
 
    //If this isn't a proper Ruby method, don't inline.
    //
@@ -269,7 +269,7 @@ TR_InlinerBase::checkInlineableWithoutInitialCalleeSymbol (TR_CallSite* callSite
          return Ruby_non_iseq_method;
       }
 
-   const rb_iseq_t *iseq_callee = TR_RubyFE::instance()->getJitInterface()->callbacks.def_iseq_ptr_f(cc->me->def);
+   const rb_iseq_t *iseq_callee = TR_RubyFE::instance()->getJitInterface()->vm_functions.def_iseq_ptr_f(cc->me->def);
 
    //Check if the callee has optional arguments.
    //
