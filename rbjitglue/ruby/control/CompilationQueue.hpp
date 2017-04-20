@@ -93,9 +93,12 @@ class CompilationQueue {
       std::remove_if(_queue.begin(), _queue.end(), p);
       auto size_after  = _queue.size(); 
 
-      TR_VerboseLog::writeLineLocked(TR_Vlog_INFO, "QUEUE: Filtered %d elements from queue",
+      if (_verbose)
+         {
+         TR_VerboseLog::writeLineLocked(TR_Vlog_INFO, "QUEUE: Filtered %d elements from queue",
                                      size_before - size_after
                                      ); 
+         }
    }
 
    /**
