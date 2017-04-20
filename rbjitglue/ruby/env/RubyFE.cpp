@@ -45,5 +45,5 @@ TR_RubyFE::TR_RubyFE(struct rb_vm_struct *vm)
 const char *
 TR_RubyFE::id2name(ID id)
    {
-   return _vm->jit->callbacks.rb_id2name_f(id);
+   return _vm->jit->vm_functions.rb_id2name_f(id);
    }

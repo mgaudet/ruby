@@ -36,7 +36,7 @@ class RubyMethodBlock
       // To save memory, we could free this if created here, 
       // hoewver for now, we leave it behind to fastpath 
       // future accesses. 
-      _original_bytecodes = rb_iseq_original_iseq(iseq); // FIXME: Currently will leak!
+      _original_bytecodes = TR_RubyFE::instance()->getJitInterface()->vm_functions.rb_iseq_original_iseq_f(iseq); 
       }
 
    const rb_iseq_t         *iseq()             const { return _iseq; }
