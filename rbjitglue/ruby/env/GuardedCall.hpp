@@ -46,17 +46,25 @@ void* invoker(void* f)
 template <typename FunctionType, typename ArgumentType>
 auto GVLGuardedCall(FunctionType function, ArgumentType argument) -> decltype(function(argument))
    {
-   /**
-    * Capture everything relevant in a lambda. 
-    */
-   auto fn = [function, argument]() -> decltype(function(argument)) { 
-      return function(argument); 
-   };
+   // Already holding GVL -- likely async compilation scenario. 
+   if (ruby_thread_has_gvl_p())
+      {
+      return static_cast<decltype(function(argument))>(function(argument));
+      }
+   else
+      {
+      /**
+       * Capture everything relevant in a lambda. 
+       */
+      auto fn = [function, argument]() -> decltype(function(argument)) { 
+         return function(argument); 
+      };
 
-   void * returnval = rb_thread_call_with_gvl(invoker<decltype(&fn)>,
-                                              static_cast<void*>(&fn));
-   auto typed_returnval = static_cast<decltype(function(argument))>(returnval); 
-   return typed_returnval;
+      void * returnval = rb_thread_call_with_gvl(invoker<decltype(&fn)>,
+                                                 static_cast<void*>(&fn));
+      auto typed_returnval = static_cast<decltype(function(argument))>(returnval); 
+      return typed_returnval;
+      }
    }
 
 #endif
