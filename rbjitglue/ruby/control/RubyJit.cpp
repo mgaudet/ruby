@@ -346,7 +346,7 @@ void* vm_compile_thread(void *vm) {
          auto repr = req.to_string().c_str(); 
          if (TR::Options::getCmdLineOptions()->getVerboseOption(TR_VerboseOptions))
             {
-            TR_VerboseLog::writeLineLocked(TR_Vlog_DISPATCH, "Popped %s for compilation"); 
+            TR_VerboseLog::writeLineLocked(TR_Vlog_DISPATCH, "Popped %s for compilation", repr); 
             }
          compileRubyISeq(req.iseq, req.name, req.optLevel);
       } else { // Queue is empty. Sleep. 
