@@ -20,21 +20,6 @@
 #ifndef GUARDED_CALL_HPP
 #define GUARDED_CALL_HPP
 #include "ruby/thread.h"
-#include <functional>
-
-/**
- * This is a function that takes a void pointer, and 
- * invokes it. This is interesting, cause I can now 
- * create a capturing lambda, and use this to invoke it
- * under rb_thread_call_with_gvl
- */
-template <typename functionType> 
-void* invoker(void* f) 
-   {
-   auto fn = static_cast<functionType>(f);
-   auto res = (*fn)(); 
-   return const_cast<void*>(static_cast<const void*>(res)); 
-   }
 
 /**
  * A call to function, guarded by rb_thread_call_with_gvl.
@@ -49,20 +34,13 @@ auto GVLGuardedCall(FunctionType function, ArgumentType argument) -> decltype(fu
    // Already holding GVL -- likely async compilation scenario. 
    if (ruby_thread_has_gvl_p())
       {
-      return static_cast<decltype(function(argument))>(function(argument));
+      return static_cast<decltype(function(argument))>( function(argument) );
       }
    else
       {
-      /**
-       * Capture everything relevant in a lambda. 
-       */
-      auto fn = [function, argument]() -> decltype(function(argument)) { 
-         return function(argument); 
-      };
-
-      void * returnval = rb_thread_call_with_gvl(invoker<decltype(&fn)>,
-                                                 static_cast<void*>(&fn));
-      auto typed_returnval = static_cast<decltype(function(argument))>(returnval); 
+      typedef VALUE (*functype)(ANYARGS);
+      auto returnval = rb_thread_value(rb_thread_create(reinterpret_cast<functype>(function), (void*)argument));
+      auto typed_returnval = reinterpret_cast<decltype(function(argument))> ( returnval ); 
       return typed_returnval;
       }
    }

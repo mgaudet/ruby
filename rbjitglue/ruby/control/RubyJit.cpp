@@ -343,10 +343,9 @@ void* vm_compile_thread(void *vm) {
       TR_RubyFE &fe = TR_RubyFE::singleton();
       TR::CompilationRequest req; 
       if (fe.getCompilationQueue().pop(req)) {
-         auto repr = req.to_string().c_str(); 
          if (TR::Options::getCmdLineOptions()->getVerboseOption(TR_VerboseOptions))
             {
-            TR_VerboseLog::writeLineLocked(TR_Vlog_DISPATCH, "Popped %s for compilation", repr); 
+            TR_VerboseLog::writeLineLocked(TR_Vlog_DISPATCH, "Popped %s for compilation", req.to_string().c_str()); 
             }
          compileRubyISeq(req.iseq, req.name, req.optLevel);
       } else { // Queue is empty. Sleep. 
@@ -357,20 +356,27 @@ void* vm_compile_thread(void *vm) {
    async_trace("compilation thread stopped. Returning NULL"); 
    return NULL; 
 }
-/**
- * Release the GVL then start compilation thread.
- */
-VALUE releaseGVLandStartCompilationThread(rb_vm_t* vm)
-   {
+
+void start_compilation_thread(rb_vm_t* vm) {
    async_trace( "inside %s, compilationThread address is %p",__FUNCTION__, &compilation_thread_started); 
    compilation_thread_started = 1;
-   rb_thread_call_without_gvl2(vm_compile_thread,             /* func */ 
-                              (void*)vm,                     /* func arg */   
-                              unblock_compilation_thread,    /* unblock func */
-                              &compilation_thread_started);  /* unblock arg */
-   async_trace( "inside %s, rb_thread_call_without_gvl has returned. Returning Qnil",__FUNCTION__); 
-   return Qnil;
-   }
+   vm_compile_thread(vm);
+}
+
+// /**
+//  * Release the GVL then start compilation thread.
+//  */
+// VALUE releaseGVLandStartCompilationThread(rb_vm_t* vm)
+//    {
+//    async_trace( "inside %s, compilationThread address is %p",__FUNCTION__, &compilation_thread_started); 
+//    compilation_thread_started = 1;
+//    rb_thread_call_without_gvl2(vm_compile_thread,             /* func */ 
+//                               (void*)vm,                     /* func arg */   
+//                               unblock_compilation_thread,    /* unblock func */
+//                               &compilation_thread_started);  /* unblock arg */
+//    async_trace( "inside %s, rb_thread_call_without_gvl has returned. Returning Qnil",__FUNCTION__); 
+//    return Qnil;
+//    }
 
 /**
  *  deque compilations
@@ -615,7 +621,9 @@ void jit_create_compilation_thread(rb_vm_t* vm)
    {
    typedef VALUE (*thread_function)(ANYARGS);
    async_trace("calling thread create");
-   rb_thread_create(reinterpret_cast<thread_function>(releaseGVLandStartCompilationThread),vm);
+   std::thread comp_thread(start_compilation_thread, vm); 
+   comp_thread.detach(); 
+   // rb_thread_create(reinterpret_cast<thread_function>(releaseGVLandStartCompilationThread),vm);
    async_trace("Thread create returned");
    }
 

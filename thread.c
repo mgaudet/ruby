@@ -988,8 +988,8 @@ thread_join_m(int argc, VALUE *argv, VALUE self)
  *     b.value   #=> RuntimeError: something went wrong
  */
 
-static VALUE
-thread_value(VALUE self)
+VALUE
+rb_thread_value(VALUE self)
 {
     rb_thread_t *th;
     GetThreadPtr(self, th);
@@ -4765,7 +4765,7 @@ Init_Thread(void)
     rb_define_method(rb_cThread, "initialize", thread_initialize, -2);
     rb_define_method(rb_cThread, "raise", thread_raise_m, -1);
     rb_define_method(rb_cThread, "join", thread_join_m, -1);
-    rb_define_method(rb_cThread, "value", thread_value, 0);
+    rb_define_method(rb_cThread, "value", rb_thread_value, 0);
     rb_define_method(rb_cThread, "kill", rb_thread_kill, 0);
     rb_define_method(rb_cThread, "terminate", rb_thread_kill, 0);
     rb_define_method(rb_cThread, "exit", rb_thread_kill, 0);
