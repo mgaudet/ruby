@@ -343,10 +343,9 @@ void* vm_compile_thread(void *vm) {
       TR_RubyFE &fe = TR_RubyFE::singleton();
       TR::CompilationRequest req; 
       if (fe.getCompilationQueue().pop(req)) {
-         auto repr = req.to_string().c_str(); 
          if (TR::Options::getCmdLineOptions()->getVerboseOption(TR_VerboseOptions))
             {
-            TR_VerboseLog::writeLineLocked(TR_Vlog_DISPATCH, "Popped %s for compilation", repr); 
+            TR_VerboseLog::writeLineLocked(TR_Vlog_DISPATCH, "Popped %s for compilation", req.to_string().c_str()); 
             }
          compileRubyISeq(req.iseq, req.name, req.optLevel);
       } else { // Queue is empty. Sleep. 
