@@ -118,10 +118,13 @@ typedef enum jit_options_bits {
  * JITed bodies may wish to reference. 
  */
 struct jit_globals_struct {
+    rb_serial_t         *ruby_vm_class_serial_ptr; 
     rb_serial_t         *ruby_vm_global_constant_state_ptr;
+    rb_serial_t         *ruby_vm_global_method_state_ptr;
     short               *redefined_flag_ptr; /* can't prefix with ruby_vm as a macro fires */
     VALUE               *ruby_rb_mRubyVMFrozenCore_ptr;
     rb_event_flag_t     *ruby_vm_event_flags_ptr; 
+    int                 initialized; /**< Initialized struct */
 };
 typedef struct jit_globals_struct jit_globals_t;
 
@@ -208,7 +211,7 @@ typedef struct rb_jit_struct rb_jit_t;
 /**
  * Initialize the JIT for a VM
  */
-void  vm_jit_init   (rb_vm_t *vm, jit_globals_t globals);
+void  vm_jit_init   (rb_vm_t *vm);
 
 /**
  * Destroy the JIT for a VM

@@ -35,9 +35,9 @@ extern char * get_jit_options();
 void verify_jit_callbacks(jit_callback_pointers_t *callbacks); 
 void vm_jit_stack_check(rb_thread_t*, rb_control_frame_t * cfp); 
 
-
+extern jit_globals_t generate_globals(rb_vm_t* vm);
 void
-vm_jit_init(rb_vm_t *vm, jit_globals_t globals)
+vm_jit_init(rb_vm_t *vm)
 {
     char const  *dll_name     = NULL; 
     char        *jit_options  = NULL;
@@ -178,7 +178,8 @@ vm_jit_init(rb_vm_t *vm, jit_globals_t globals)
     jit->vm_functions.rb_iseq_original_iseq_f  = rb_iseq_original_iseq;
 
     /* Initialize Globals */
-    jit->globals = globals;
+    jit->globals = generate_globals(vm);
+    assert(jit->globals.initialized == 1); 
 
     vm->jit = jit;
     

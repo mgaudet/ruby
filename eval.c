@@ -231,7 +231,6 @@ ruby_cleanup(volatile int ex)
     return sysex;
 }
 
-extern jit_globals_t jit_globals; 
 
 static int
 ruby_exec_internal(void *n)
@@ -244,7 +243,7 @@ ruby_exec_internal(void *n)
 
 #ifdef JIT_OMR
     if (!GET_VM()->jit) { 
-      vm_jit_init(GET_VM(), jit_globals);
+      vm_jit_init(GET_VM());
     }
 #endif
 
