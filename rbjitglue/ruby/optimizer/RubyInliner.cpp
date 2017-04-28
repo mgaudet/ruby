@@ -138,6 +138,29 @@ verify_children(TR::Node* node)
    }
 
 
+static int
+jit_callable_class_p(const rb_callable_method_entry_t* me)
+{
+    VALUE klass = me->defined_class;
+    if (!klass) return FALSE;
+    switch (RB_BUILTIN_TYPE(klass)) {
+      case T_ICLASS:
+	if (!RB_TYPE_P(RCLASS_SUPER(klass), T_MODULE)) break;
+      case T_MODULE:
+	return TRUE;
+    }
+    while (klass) {
+	if (klass == rb_cBasicObject) {
+	    return TRUE;
+	}
+	klass = RCLASS_SUPER(klass);
+    }
+    return FALSE;
+}
+
+
+
+
 /**
  * Returns an enum value that indicates whether or not we will be able to inline. 
  */
@@ -162,7 +185,7 @@ TR_InlinerBase::checkInlineableWithoutInitialCalleeSymbol (TR_CallSite* callSite
       TR::DebugCounter::incStaticDebugCounter(comp, TR::DebugCounter::debugCounterName(comp, "ruby.callSites/send_without_block/notInlineable/splattedArgs"));
       return Ruby_unsupported_calltype;
       }
-  
+
    /* 
     * Tailcalls require special support. 
     */ 
@@ -183,11 +206,31 @@ TR_InlinerBase::checkInlineableWithoutInitialCalleeSymbol (TR_CallSite* callSite
 
 
    CALL_CACHE cc = reinterpret_cast<CALL_CACHE>(node->getThirdChild()->getAddress());
+   TR_ASSERT_FATAL(TR_RubyFE::instance()->getJitInterface()->globals.initialized == 1, "using uninitialzied globals"); 
+
+   // No point inlining if it's never going to run! 
+   if (cc->method_state != *TR_RubyFE::instance()->getJitInterface()->globals.ruby_vm_global_method_state_ptr)
+      {
+      TR::DebugCounter::incStaticDebugCounter(comp, TR::DebugCounter::debugCounterName(comp, "ruby.callSites/send_without_block/notInlineable/method_state_changed"));
+      return Ruby_unsupported_calltype;
+      }
+
    const rb_callable_method_entry_t *me = cc->me; 
    if(!me)
       {
       TR::DebugCounter::incStaticDebugCounter(comp, TR::DebugCounter::debugCounterName(comp, "ruby.callSites/send_without_block/notInlineable/missing_method_entry"));
       return Ruby_missing_method_entry;
+      }
+
+   // Low bit set. 
+   // 
+   // Empirically this always indicates that ->def is pointing to garbage. What I don't understand is _why_. 
+   // 
+   // I've asked on Ruby-core: http://blade.nagaokaut.ac.jp/cgi-bin/scat.rb/ruby/ruby-core/80924
+   if (me->flags & 0x1)
+      {
+      TR::DebugCounter::incStaticDebugCounter(comp, TR::DebugCounter::debugCounterName(comp, "ruby.callSites/send_without_block/notInlineable/unsupported_method_entry_flag/low_bit_set/%d",me->flags));
+      return Ruby_unsupported_method_entry_flag;
       }
 
    if (!me->def)
@@ -217,7 +260,11 @@ TR_InlinerBase::checkInlineableWithoutInitialCalleeSymbol (TR_CallSite* callSite
     *       * NOEX_RESPONDS    -> BOUND_RESPONDS (macro)
     */
 
-   // Break if we hit vm_call_method_each_type.
+   // This logic is inspired heavily by vm_call_method
+   //
+   // Essentially, we break if we hit vm_call_method_each_type, because
+   // these are the cases where we needn't be concerned with having to
+   // issue a warning. 
    //
    // FIXME: Need to investigate others later. 
    switch (METHOD_ENTRY_VISI(cc->me)) 
@@ -226,12 +273,11 @@ TR_InlinerBase::checkInlineableWithoutInitialCalleeSymbol (TR_CallSite* callSite
          break; // OK for inlining.
       case METHOD_VISI_PRIVATE:
          if (ci->flag & VM_CALL_FCALL)
+            TR::DebugCounter::incStaticDebugCounter(comp, TR::DebugCounter::debugCounterName(comp, "ruby.callSites/send_without_block/private"));
             break; // Ok for inlining
       default: 
             {
-            char flag[15];
-            snprintf(flag, 15, "0x%lx", me->flags);
-            TR::DebugCounter::incStaticDebugCounter(comp, TR::DebugCounter::debugCounterName(comp, "ruby.callSites/send_without_block/notInlineable/unsupported_method_entry_flag/%s", flag));
+            TR::DebugCounter::incStaticDebugCounter(comp, TR::DebugCounter::debugCounterName(comp, "ruby.callSites/send_without_block/notInlineable/unsupported_method_entry_flag/0x%lx", me->flags));
             return Ruby_unsupported_method_entry_flag;
             }
       }
@@ -246,13 +292,20 @@ TR_InlinerBase::checkInlineableWithoutInitialCalleeSymbol (TR_CallSite* callSite
     *     const rb_iseq_t *iseq = def_iseq_ptr(cc->me->def);
     *     const int param_size = iseq->body->param.size;
     *     const int local_size = iseq->body->local_table_size;
-    */ 
+    *
+    */
 
-   char methodName[64];
-   char klassName[64];
-   // TODO: only acquire GVL once! 
-   snprintf(methodName, 64, "%s", GVLGuardedCall(TR_RubyFE::instance()->getJitInterface()->vm_functions.rb_id2name_f,ci->mid));
-   snprintf(klassName, 64, "%s", GVLGuardedCall(TR_RubyFE::instance()->getJitInterface()->vm_functions.rb_class2name_f,me->defined_class));
+   /*
+    * In an async compilation world, this code is racy (even under GVL) 
+    * becuase GC can happen; so disabling this until we can run 
+    * dramatically more of the inlining under the GVL than just this. 
+    *
+    * char methodName[64];
+    * char klassName[64];
+
+    * snprintf(methodName, 64, "%s", GVLGuardedCall(TR_RubyFE::instance()->getJitInterface()->vm_functions.rb_id2name_f,ci->mid));
+    * snprintf(klassName, 64, "%s", GVLGuardedCall(TR_RubyFE::instance()->getJitInterface()->vm_functions.rb_class2name_f,me->defined_class));
+    */ 
 
    //If this isn't a proper Ruby method, don't inline.
    //
@@ -264,14 +317,21 @@ TR_InlinerBase::checkInlineableWithoutInitialCalleeSymbol (TR_CallSite* callSite
       case VM_METHOD_TYPE_ISEQ:
          break;
       case VM_METHOD_TYPE_CFUNC:
-         TR::DebugCounter::incStaticDebugCounter(comp, TR::DebugCounter::debugCounterName(comp, "ruby.callSites/send_without_block/notInlineable/inlining_cfunc/%s/%s", klassName,methodName));
+         // See note above
+         //TR::DebugCounter::incStaticDebugCounter(comp, TR::DebugCounter::debugCounterName(comp, "ruby.callSites/send_without_block/notInlineable/inlining_cfunc/%s/%s", klassName,methodName));
+         TR::DebugCounter::incStaticDebugCounter(comp, TR::DebugCounter::debugCounterName(comp, "ruby.callSites/send_without_block/notInlineable/inlining_cfunc"));
          return Ruby_inlining_cfunc;
       default:
-         TR::DebugCounter::incStaticDebugCounter(comp, TR::DebugCounter::debugCounterName(comp, "ruby.callSites/send_without_block/notInlineable/inlining_non_iseq_method/%s/%s", klassName,methodName));
+         // See note above
+         //TR::DebugCounter::incStaticDebugCounter(comp, TR::DebugCounter::debugCounterName(comp, "ruby.callSites/send_without_block/notInlineable/inlining_non_iseq_method/%s/%s", klassName,methodName));
+         TR::DebugCounter::incStaticDebugCounter(comp, TR::DebugCounter::debugCounterName(comp, "ruby.callSites/send_without_block/notInlineable/inlining_non_iseq_method"));
          return Ruby_non_iseq_method;
       }
 
-   const rb_iseq_t *iseq_callee = GVLGuardedCall(TR_RubyFE::instance()->getJitInterface()->vm_functions.def_iseq_ptr_f, cc->me->def);
+   // FIXME: Async Compilation makes this, and all references via this pointer below racy.
+   // Need a runtime assumption guarded accessor that will abort inlining should the 
+   // iseq be freed.  
+   const rb_iseq_t *iseq_callee = GVLGuardedCall(TR_RubyFE::instance()->getJitInterface()->vm_functions.def_iseq_ptr_f, me->def);
 
    //Check if the callee has optional arguments.
    //
