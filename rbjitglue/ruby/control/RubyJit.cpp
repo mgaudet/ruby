@@ -231,6 +231,13 @@ int jitInit(struct rb_vm_struct *vm, char *options)
       vm->jit->options |= CODE_CACHE_RECLAMATION;
       }
 
+   // Disable async compilation by default until all the bugs have been 
+   // ironed out, but allow it to be turned on and delivered for now. 
+   if (getenv("ENABLE_ASYNC_COMPILATION") == NULL) 
+      {
+      TR::Options::getCmdLineOptions()->setOption(TR_DisableAsyncCompilation);
+      }
+
    return 0;
    }
 
@@ -612,10 +619,17 @@ VALUE jit_update_state(rb_thread_t* th, const rb_iseq_t* iseq_const)
 
 void jit_create_compilation_thread(rb_vm_t* vm) 
    {
-   typedef VALUE (*thread_function)(ANYARGS);
-   async_trace("calling thread create");
-   rb_thread_create(reinterpret_cast<thread_function>(releaseGVLandStartCompilationThread),vm);
-   async_trace("Thread create returned");
+   if (!TR::Options::getCmdLineOptions()->getOption(TR_DisableAsyncCompilation)) 
+      {
+      typedef VALUE (*thread_function)(ANYARGS);
+      async_trace("calling thread create");
+      rb_thread_create(reinterpret_cast<thread_function>(releaseGVLandStartCompilationThread),vm);
+      async_trace("Thread create returned");
+      } 
+   else
+      {
+      async_trace("Declined to create compilation threads -- Option says disabled.");
+      }
    }
 
 /**
