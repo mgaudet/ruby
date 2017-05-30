@@ -21,6 +21,8 @@
 #define RUBY_COMPILATION_QUEUE
 
 #include <deque> 
+#include <exception> 
+#include <type_traits>
 #include "env/VerboseLog.hpp"
 #include "infra/Monitor.hpp"
 #include "infra/CriticalSection.hpp"
@@ -54,11 +56,10 @@ class CompilationQueue {
    }
 
    /**
-    * Returns true if an element was popped off the 
-    * queue. 
+    * Returns true if an element was popped off the queue. 
     *
-    * If this returns false, it is undefined behaviour
-    * to derference the parameter
+    * If this returns false, it is undefined behaviour to dereference the
+    * parameter
     */
    bool pop(T& ret) { 
       OMR::CriticalSection lock(_queueMonitor); 
@@ -74,6 +75,48 @@ class CompilationQueue {
          return false;
       }
    }
+
+   /**
+    * Exception type for handling an empty queue
+    */
+   class EmptyQueue : public std::exception {
+       virtual const char* what() const throw()
+            {
+            return "Empty Queue";
+            }
+   };
+
+   /**
+    * If an element is popped off the queue, the transformer is called before
+    * returning. 
+    *
+    * By calling the transformer before returning, the transformer operates
+    * under the protection of the queue monitor. 
+    *
+    */
+   template <typename TransformFunction>
+   auto popAndTransform(TransformFunction transformer) -> typename std::result_of<TransformFunction(T)>::type { 
+      OMR::CriticalSection lock(_queueMonitor); 
+      if (_queue.size() > 0) { 
+
+         auto dequeued = _queue.front();
+         auto ret = transformer(dequeued); 
+         _queue.pop_front();
+         if (_verbose) 
+            {
+            TR_VerboseLog::writeLineLocked(TR_Vlog_INFO, "QUEUE: popped %s off compilation queue (queue size after %d), transformed into %s",
+                                           dequeued.to_string().c_str(),
+                                           _queue.size(),
+                                           ret->to_string().c_str()
+                                           ); 
+            }
+         return ret;
+      } else { 
+         throw EmptyQueue();         
+      }
+   }
+
+
 
    /**
     * Remove every element from the queue that matches the provided predicate. 

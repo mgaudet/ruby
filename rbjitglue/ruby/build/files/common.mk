@@ -51,6 +51,7 @@ JIT_PRODUCT_SOURCE_FILES+=\
     $(JIT_OMR_DIRTY_DIR)/env/JitConfig.cpp \
     $(JIT_PRODUCT_DIR)/control/RubyJit.cpp \
     $(JIT_OMR_DIRTY_DIR)/control/CompilationController.cpp \
+    $(JIT_OMR_DIRTY_DIR)/control/CompilationStateManager.cpp  \
     $(JIT_OMR_DIRTY_DIR)/runtime/Runtime.cpp \
     $(JIT_OMR_DIRTY_DIR)/runtime/Trampoline.cpp \
     $(JIT_PRODUCT_DIR)/compile/RubySymbolReferenceTable.cpp \

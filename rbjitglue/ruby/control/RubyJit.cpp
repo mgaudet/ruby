@@ -18,11 +18,13 @@
 
 #include "ruby/env/RubyMethod.hpp"
 #include "env/ConcreteFE.hpp"
+#include "ilgen/IlGeneratorMethodDetails.hpp"
 #include "control/CompileMethod.hpp"
 #include "control/Options.hpp"
 #include "control/Options_inlines.hpp"
 #include "control/CompilationQueue.hpp" 
 #include "control/CompilationRequest.hpp" 
+#include "control/CompilationStateManager.hpp"
 #include "env/IO.hpp"
 #include "env/VMHeaders.hpp"
 #include "ruby/version.h"
@@ -31,10 +33,11 @@
 #include "env/CompilerEnv.hpp"
 #include "env/RawAllocator.hpp"
 #include "ras/DebugCounter.hpp"
+#include "compile/Compilation.hpp"
 #include <string>
 #include <thread>
 #include <chrono> 
-#include "compile/Compilation.hpp"
+#include <memory>
 
 extern void setupCodeCacheParameters(int32_t *, OMR::CodeCacheCodeGenCallbacks *callBacks, int32_t *numHelpers, int32_t *CCPreLoadedCodeSize);
 typedef VALUE (*jit_method_t)(rb_thread_t*);
@@ -58,6 +61,40 @@ extern TR_RuntimeHelperTable runtimeHelpers;
 
 #define initHelper(NAME) \
    runtimeHelpers.setAddress(RubyHelper_##NAME, helperAddress((void*)vm->jit->callbacks.NAME##_f))
+
+
+/**
+ * The ruby compilation state manager manages the state related to a 
+ * _ruby_ compilation. Inheritence is not used here to ensure the 
+ * initialization order is controlled
+ */
+struct RubyCompilationStateManager : public TR_Uncopyable
+   {
+   RubyCompilationStateManager(rb_iseq_t* iseq_p, std::string name_p, TR_Hotness optLevel_p)
+      : iseq(iseq_p),
+        name(name_p),
+        optLevel(optLevel_p),
+        mb(iseq, name.c_str()),
+        compilee(mb), 
+        details(&compilee),
+        stateManager(NULL, details, optLevel) 
+      {
+      }
+
+   std::string to_string()
+      {
+      return name; 
+      }
+
+   rb_iseq_t* iseq; 
+   std::string name;
+   TR_Hotness optLevel;
+   RubyMethodBlock mb;
+   ResolvedRubyMethod compilee;
+   TR::IlGeneratorMethodDetails details;
+   CompilationStateManager stateManager;
+   };
+
 
 static void
 initializeAllHelpers(struct rb_vm_struct *vm, TR_RubyJitConfig *jitConfig)
@@ -288,12 +325,9 @@ int jitTerminate(void *)
    return 0;
    }
 
-VALUE compileRubyISeq(rb_iseq_t *iseq, std::string name, TR_Hotness optLevel)
+
+VALUE updateInfo(uint8_t* startPC, rb_iseq_t* iseq, TR_Hotness optLevel)
    {
-   int32_t rc = 0;
-   RubyMethodBlock mb(iseq, name.c_str()); //OK, as lifetime is shorter than param. 
-   ResolvedRubyMethod compilee(mb);
-   void * startPC = compileMethod(NULL, compilee, optLevel, rc);
    if (startPC)
       {
       iseq_jit_body_info *body_info =  ALLOC(iseq_jit_body_info);
@@ -336,7 +370,16 @@ VALUE compileRubyISeq(rb_iseq_t *iseq, std::string name, TR_Hotness optLevel)
       }
    }
 
+
 #define async_trace(...) if (getenv("ASYNC_COMPILATION_TRACE")) { TR_VerboseLog::writeLineLocked(TR_Vlog_INFO, __VA_ARGS__); } 
+VALUE compileRubyISeq(rb_iseq_t *iseq, std::string name, TR_Hotness optLevel)
+   {
+   int32_t rc = 0;
+   RubyMethodBlock mb(iseq, name.c_str()); //OK, as lifetime is shorter than param. 
+   ResolvedRubyMethod compilee(mb);
+   uint8_t* startPC = compileMethod(NULL, compilee, optLevel, rc);
+   return updateInfo(startPC, iseq, optLevel); 
+   }
 
 static int compilation_thread_started = 0; 
 void unblock_compilation_thread(void* arg) { 
@@ -344,39 +387,89 @@ void unblock_compilation_thread(void* arg) {
    *(int*)arg  = 0; // interrupt compilation thread. 
 }
 
+VALUE compileStateManager(std::unique_ptr<RubyCompilationStateManager> manager) 
+   {
+
+   // I'm doing this to avoid casting an std::unique_ptr to 
+   // void*, which I just know will end in tears. 
+   struct LambdaArg {
+      LambdaArg(std::unique_ptr<RubyCompilationStateManager> m) : manager(std::move(m)) {} 
+      std::unique_ptr<RubyCompilationStateManager> manager; 
+   };
+   LambdaArg la(std::move(manager));  
+   
+   auto compileWithoutGVL = [](void* la) -> void* { 
+      LambdaArg* lambda_arg = (LambdaArg*)la; 
+      lambda_arg->manager->stateManager.compile();
+      return (void*)updateInfo(lambda_arg->manager->stateManager.getStartPC(),
+                               lambda_arg->manager->iseq,
+                               lambda_arg->manager->optLevel);
+   };
+
+   if (!TR::Options::getCmdLineOptions()->getOption(TR_DisableAsyncCompilation))
+      { 
+      async_trace("releasing GVL to compile");
+      VALUE ret = (VALUE)rb_thread_call_without_gvl2(compileWithoutGVL,            /* func */ 
+                                                  (void*)&la,                    /* func arg */   
+                                                  unblock_compilation_thread,    /* unblock func */
+                                                  &compilation_thread_started);  /* unblock arg */
+      async_trace("Re-Acquired GVL after compilation");
+      return ret; 
+      }
+   else
+      { 
+      return (VALUE)compileWithoutGVL((void*)&la);
+      }
+   }
+
+
+
 void* vm_compile_thread(void *vm) { 
-   async_trace("invoked compile thread"); 
+   async_trace("invoked compile thread loop"); 
+   compilation_thread_started = 1;
    while (compilation_thread_started) {
       TR_RubyFE &fe = TR_RubyFE::singleton();
-      TR::CompilationRequest req; 
-      if (fe.getCompilationQueue().pop(req)) {
+      
+      try {
+         /* 
+          * Why use a tranformer here? 
+          *
+          * Well. We want the compilation state manager, and all the objects contained therein 
+          * to be constructed _while holding the queue lock_. 
+          * 
+          * This prevents a data race where an unconstructed compilation could miss a shutdown
+          * notification,which would cause a crash.
+          *
+          * However, it's important that this transformer not be called while holding the GVL, 
+          * or else there is a possibility of deadlock. 
+          *
+          */
+         auto transformer = [](TR::CompilationRequest req) -> std::unique_ptr<RubyCompilationStateManager>
+            {
+            return std::unique_ptr<RubyCompilationStateManager>(new RubyCompilationStateManager(req.iseq, req.name, req.optLevel)); 
+            };
+
+         std::unique_ptr<RubyCompilationStateManager> manager = fe.getCompilationQueue().popAndTransform(transformer); 
          if (TR::Options::getCmdLineOptions()->getVerboseOption(TR_VerboseOptions))
             {
-            TR_VerboseLog::writeLineLocked(TR_Vlog_DISPATCH, "Popped %s for compilation", req.to_string().c_str()); 
+            TR_VerboseLog::writeLineLocked(TR_Vlog_DISPATCH, "Popped %s for compilation", manager->to_string().c_str()); 
             }
-         compileRubyISeq(req.iseq, req.name, req.optLevel);
-      } else { // Queue is empty. Sleep. 
-               // Perhaps a better answer here would be the queue sleeping until insertion. 
-         std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+         compileStateManager(std::move(manager));
+      } catch (TR::CompilationQueue<TR::CompilationRequest>::EmptyQueue e)  { // Queue is empty. Sleep. 
+         rb_thread_wait_for(rb_time_interval(DBL2NUM(0.001)));
+         // auto sleepWithoutGVL = [](void*) -> void* { 
+         //    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+         // };
+         // rb_thread_call_without_gvl2(sleepWithoutGVL,               /* func */ 
+         //                             NULL,                          /* func arg */   
+         //                             unblock_compilation_thread,    /* unblock func */
+         //                             &compilation_thread_started);  /* unblock arg */
       }
    }
    async_trace("compilation thread stopped. Returning NULL"); 
    return NULL; 
 }
-/**
- * Release the GVL then start compilation thread.
- */
-VALUE releaseGVLandStartCompilationThread(rb_vm_t* vm)
-   {
-   async_trace( "inside %s, compilationThread address is %p",__FUNCTION__, &compilation_thread_started); 
-   compilation_thread_started = 1;
-   rb_thread_call_without_gvl2(vm_compile_thread,             /* func */ 
-                              (void*)vm,                     /* func arg */   
-                              unblock_compilation_thread,    /* unblock func */
-                              &compilation_thread_started);  /* unblock arg */
-   async_trace( "inside %s, rb_thread_call_without_gvl has returned. Returning Qnil",__FUNCTION__); 
-   return Qnil;
-   }
 
 /**
  *  deque compilations
@@ -528,7 +621,8 @@ VALUE jit_compile(rb_iseq_t *iseq)
    // If we're not compiling async, block and compile immediately here.
    if (TR::Options::getCmdLineOptions()->getOption(TR_DisableAsyncCompilation))
       {
-      return compileRubyISeq(iseq, name, optLevel);
+      auto manager = std::unique_ptr<RubyCompilationStateManager>(new RubyCompilationStateManager(iseq, name, optLevel)); 
+      return compileStateManager(std::move(manager));
       }
    else  // Otherwise, queue the compilation. 
       {
@@ -623,7 +717,7 @@ void jit_create_compilation_thread(rb_vm_t* vm)
       {
       typedef VALUE (*thread_function)(ANYARGS);
       async_trace("calling thread create");
-      rb_thread_create(reinterpret_cast<thread_function>(releaseGVLandStartCompilationThread),vm);
+      rb_thread_create(reinterpret_cast<thread_function>(vm_compile_thread),vm);
       async_trace("Thread create returned");
       } 
    else
