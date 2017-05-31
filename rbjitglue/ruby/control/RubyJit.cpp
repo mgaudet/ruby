@@ -87,6 +87,12 @@ struct RubyCompilationStateManager : public TR_Uncopyable
       return name; 
       }
 
+   uint8_t* getStartPC()
+      { 
+      TR_ASSERT_FATAL(stateManager.getState() == CompilationStateManager::COMPLETED, "Asking for a PC  before it's available %s", name.c_str());
+      return stateManager.getStartPC(); 
+      }
+
    rb_iseq_t* iseq; 
    std::string name;
    TR_Hotness optLevel;
@@ -416,17 +422,23 @@ VALUE compileStateManager(std::unique_ptr<RubyCompilationStateManager> manager)
    
    auto compileWithoutGVL = [](void* la) -> void* { 
       LambdaArg* lambda_arg = (LambdaArg*)la; 
+      async_trace("Compiling State Manager %s", lambda_arg->manager->to_string().c_str());
+
       lambda_arg->manager->stateManager.compile();
+      async_trace("Compiled State Manager %s, PC is %p",
+                  lambda_arg->manager->to_string().c_str(),
+                  lambda_arg->manager->getStartPC()
+                  );
       return NULL;
    };
 
    if (!TR::Options::getCmdLineOptions()->getOption(TR_DisableAsyncCompilation))
       { 
       async_trace("releasing GVL to compile");
-      rb_thread_call_without_gvl2(compileWithoutGVL,            /* func */ 
-                                                  (void*)&la,                    /* func arg */   
-                                                  unblock_compilation_thread,    /* unblock func */
-                                                  &compilation_thread_started);  /* unblock arg */
+      rb_thread_call_without_gvl(compileWithoutGVL,             /* func */ 
+                                 (void*)&la,                    /* func arg */   
+                                 unblock_compilation_thread,    /* unblock func */
+                                 &compilation_thread_started);  /* unblock arg */
 
       async_trace("Re-Acquired GVL after compilation");
       }
@@ -434,7 +446,7 @@ VALUE compileStateManager(std::unique_ptr<RubyCompilationStateManager> manager)
       { 
       compileWithoutGVL((void*)&la);
       }
-   return updateInfo(la.manager->stateManager.getStartPC(),
+   return updateInfo(la.manager->getStartPC(),
                      la.manager->iseq,
                      la.manager->optLevel);
    }
