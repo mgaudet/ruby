@@ -331,6 +331,18 @@ VALUE updateInfo(uint8_t* startPC, rb_iseq_t* iseq, TR_Hotness optLevel)
    {
    if (startPC)
       {
+      if (getenv("NO_PUBLISH")) 
+         {
+         static bool warning = false; 
+         if (!warning)
+            { 
+            fprintf(stderr, "blacklisting iseq for investigation purposes\n");
+            warning = true; 
+            }
+         iseq->jit.state = ISEQ_JIT_STATE_BLACKLISTED;
+         return Qfalse; 
+         }
+
       iseq_jit_body_info *body_info =  ALLOC(iseq_jit_body_info);
       assert(body_info && "Failed to allocate body_info");
 
@@ -645,6 +657,7 @@ VALUE jit_compile(rb_iseq_t *iseq)
 
 VALUE jit_dispatch(rb_thread_t *th, jit_method_t code)
    {
+   TR_ASSERT_FATAL(!getenv("NO_PUBLISH"), "Executing unpublished code"); 
 #if !defined(TR_HOST_POWER)
    return (*code)(th);
 #else
