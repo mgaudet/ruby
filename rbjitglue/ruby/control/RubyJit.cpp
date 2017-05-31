@@ -406,7 +406,6 @@ void unblock_compilation_thread(void* arg) {
 
 VALUE compileStateManager(std::unique_ptr<RubyCompilationStateManager> manager) 
    {
-
    // I'm doing this to avoid casting an std::unique_ptr to 
    // void*, which I just know will end in tears. 
    struct LambdaArg {
@@ -418,25 +417,26 @@ VALUE compileStateManager(std::unique_ptr<RubyCompilationStateManager> manager)
    auto compileWithoutGVL = [](void* la) -> void* { 
       LambdaArg* lambda_arg = (LambdaArg*)la; 
       lambda_arg->manager->stateManager.compile();
-      return (void*)updateInfo(lambda_arg->manager->stateManager.getStartPC(),
-                               lambda_arg->manager->iseq,
-                               lambda_arg->manager->optLevel);
+      return NULL;
    };
 
    if (!TR::Options::getCmdLineOptions()->getOption(TR_DisableAsyncCompilation))
       { 
       async_trace("releasing GVL to compile");
-      VALUE ret = (VALUE)rb_thread_call_without_gvl2(compileWithoutGVL,            /* func */ 
+      rb_thread_call_without_gvl2(compileWithoutGVL,            /* func */ 
                                                   (void*)&la,                    /* func arg */   
                                                   unblock_compilation_thread,    /* unblock func */
                                                   &compilation_thread_started);  /* unblock arg */
+
       async_trace("Re-Acquired GVL after compilation");
-      return ret; 
       }
    else
       { 
-      return (VALUE)compileWithoutGVL((void*)&la);
+      compileWithoutGVL((void*)&la);
       }
+   return updateInfo(la.manager->stateManager.getStartPC(),
+                     la.manager->iseq,
+                     la.manager->optLevel);
    }
 
 
