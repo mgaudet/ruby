@@ -34,6 +34,7 @@
 #include "env/RawAllocator.hpp"
 #include "ras/DebugCounter.hpp"
 #include "compile/Compilation.hpp"
+#include "AtomicSupport.hpp"
 #include <string>
 #include <thread>
 #include <chrono> 
@@ -351,7 +352,11 @@ VALUE updateInfo(uint8_t* startPC, rb_iseq_t* iseq, TR_Hotness optLevel)
       iseq->jit.u.code  = body_info->startPC;
 
       // It will be important the state transition happens last 
-      // when doing asynchronous compilation.
+      // when doing asynchronous compilation. Flush previous 
+      // writes here.
+      VM_AtomicSupport::writeBarrier(); 
+
+     
       iseq->jit.state = ISEQ_JIT_STATE_JITTED;
       return Qtrue; 
       }
