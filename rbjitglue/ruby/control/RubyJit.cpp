@@ -745,10 +745,14 @@ void jit_create_compilation_thread(rb_vm_t* vm)
    {
    if (!TR::Options::getCmdLineOptions()->getOption(TR_DisableAsyncCompilation)) 
       {
-      typedef VALUE (*thread_function)(ANYARGS);
-      async_trace("calling thread create");
-      rb_thread_create(reinterpret_cast<thread_function>(vm_compile_thread),vm);
-      async_trace("Thread create returned");
+      const int thread_count = getenv("COMPILATION_THREAD_COUNT")  ? atoi(getenv("COMPILATION_THREAD_COUNT")) : 1; 
+      async_trace("Creating compilation %d threads", thread_count); 
+      for (int i = 0; i < thread_count; i++) 
+         {
+         async_trace("Creating compilation thread %d", i); 
+         typedef VALUE (*thread_function)(ANYARGS);
+         rb_thread_create(reinterpret_cast<thread_function>(vm_compile_thread),vm);
+         }
       } 
    else
       {
